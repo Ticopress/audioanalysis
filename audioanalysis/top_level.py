@@ -2,50 +2,35 @@
 Created on Nov 16, 2015
 
 @author: justinpalpant
+
+Copyright 2015 Justin Palpant
+
+This file is part of Foobar.
+
+Foobar is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+Foobar is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+Foobar. If not, see http://www.gnu.org/licenses/.
 '''
 
-import Tkinter, tkFileDialog
 import matplotlib
 import freqanalysis
-from logging import root
+import PyQt4
 
-class AudioGUI(Tkinter.Frame):
+class AudioGUI():
 
-    def __init__(self, root):
-        #Add some widgets
-        root.minsize(width=500, height=200)
+    def __init__(self):
         
-        Tkinter.Frame.__init__(self, root, width=500, height=200)
-        
-        #Define the specifications for opening files
-        self.file_opt = options = {}
-        options['defaultextension'] = '.wav'
-        options['filetypes'] = [('WAV files', '.wav')]
-        options['initialdir'] = '/Users/new/Documents/JarvisLab/audioanalysis/'
-        options['parent'] = root
-        options['title'] = 'Select an audio file'
-        self.grid()
-        self.createWidgets()
     
-    def createWidgets(self):
-        self.file_button = Tkinter.Button(self, text='Select File', command=self.browsefilename)
-        self.file_button.grid(row=0, column=0, padx=5)
-        self.filename_box = Tkinter.Text(self, height=1, highlightbackground="black", highlightthickness=1)
-        self.filename_box.grid(row=0, column=1, padx=5)
-        
-    def browsefilename(self):
-        filename = tkFileDialog.askopenfilename(**self.file_opt)
-        print filename
-        self.filename_box.insert("1.end", filename)
-    
-        
+
 def main():
-    root = Tkinter.Tk()
-    AudioGUI(root)
-    root.title("Audio Analysis")
-    root.attributes("-topmost", True)
-    root.mainloop()
-           
 
     pass
 
