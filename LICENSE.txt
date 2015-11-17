@@ -1,1 +1,0 @@
-Using PyQt4, so I imagine I'll shortly be adding a GPLv2 or GPLv3 license here
