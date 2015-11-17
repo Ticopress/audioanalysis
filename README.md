@@ -12,9 +12,17 @@ Current State
 
 The software is in the initial stages of development.
 
-Thus far I have designed the overall structure and UX flow of the software and have made the first main GUI.
+I have selected a GUI framework for the project - it will use PyQt4, until further notice.
+I have designed the first GUI using Qt Designer.
 
-Copyright and Licence
+Short-Term Goals
+----------------
+
+- Test using the empty Widget in main.ui for a matplotlib Figure
+- Implement programmatic control of graph using zoom buttons and scroll bars
+- Implement open file button to read audio files
+
+Copyright and License
 ---------------------
 
 For the complete copyright and licensing information see COPYING
