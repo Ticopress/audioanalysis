@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>753</width>
-    <height>622</height>
+    <width>1280</width>
+    <height>751</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -83,16 +83,6 @@
        <layout class="QVBoxLayout" name="spectr_0">
         <item>
          <layout class="QHBoxLayout" name="spectr_1">
-          <item>
-           <widget class="QWidget" name="spectrogram" native="true">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-           </widget>
-          </item>
           <item>
            <layout class="QVBoxLayout" name="spectr_y_controls">
             <item>
@@ -391,7 +381,7 @@
          </spacer>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButton">
+         <widget class="QPushButton" name="confirm_selection">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
             <horstretch>0</horstretch>
@@ -424,7 +414,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>753</width>
+     <width>1280</width>
      <height>22</height>
     </rect>
    </property>
