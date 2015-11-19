@@ -20,14 +20,14 @@ You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
 
-import freqanalysis
+from freqanalysis import AudioAnalyzer
 import numpy as np
 from PyQt4.uic import loadUiType
- 
+
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas)
-from matplotlib.pyplot import specgram
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
@@ -53,6 +53,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.canvas = FigureCanvas(self.fig)
         self.spectr_1.insertWidget(0, self.canvas)
         self.canvas.draw()
+        
+        self.analyzer = AudioAnalyzer()
+        
+        self.set_axis((0, 1, 0, 1))
 
     def redraw(self):
         # self.canvas = FigureCanvas(self.fig)
@@ -60,56 +64,49 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.show()
 
     def yzoom_out(self):
-        plot_limits = self.axes.axis()
-        yl = plot_limits[2]
-        yh = plot_limits[3]
+        yl = self.current_view[2]
+        yh = self.current_view[3]
         dy = yh - yl
         yl -= 0.1 * dy
         yh += 0.1 * dy
         
-        new_plot_limits = (plot_limits[0], plot_limits[1], yl, yh)
+        new_limits = (self.current_view[0], self.current_view[1], yl, yh)
         
-        self.axes.axis(new_plot_limits)
-        self.redraw()
+        self.set_axis(new_limits) 
         
     def yzoom_in(self):
-        plot_limits = self.axes.axis()
-        yl = plot_limits[2]
-        yh = plot_limits[3]
+        yl = self.current_view[2]
+        yh = self.current_view[3]
         dy = yh - yl
         yl += 0.1 * dy
         yh -= 0.1 * dy
         
-        new_plot_limits = (plot_limits[0], plot_limits[1], yl, yh)
+        new_limits = (self.current_view[0], self.current_view[1], yl, yh)
         
-        self.axes.axis(new_plot_limits)
-        self.redraw()
+        self.set_axis(new_limits)
+        
         
     def xzoom_out(self):
-        plot_limits = self.axes.axis()
-        xl = plot_limits[0]
-        xh = plot_limits[1]
+        xl = self.current_view[0]
+        xh = self.current_view[1]
         dx = xh - xl
         xl -= 0.1 * dx
         xh += 0.1 * dx
         
-        new_plot_limits = (xl, xh, plot_limits[2], plot_limits[3])
+        new_limits = (xl, xh, self.current_view[2], self.current_view[3])
         
-        self.axes.axis(new_plot_limits)
-        self.redraw()
-        
+        self.set_axis(new_limits) 
+               
     def xzoom_in(self):
-        plot_limits = self.axes.axis()
-        xl = plot_limits[0]
-        xh = plot_limits[1]
+        xl = self.current_view[0]
+        xh = self.current_view[1]
         dx = xh - xl
         xl += 0.1 * dx
         xh -= 0.1 * dx
         
-        new_plot_limits = (xl, xh, plot_limits[2], plot_limits[3])
+        new_limits = (xl, xh, self.current_view[2], self.current_view[3])
         
-        self.axes.axis(new_plot_limits)
-        self.redraw()
+        self.set_axis(new_limits)
          
     def yslide(self):
         print self.spectr_vsb.sliderPosition()
@@ -117,10 +114,36 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def xslide(self):
         print self.spectr_hsb.sliderPosition()  
         
+    def set_axis(self, limits):
+        self.axes.axis(limits)
+        self.current_view = limits
+        self.redraw()
+        
     def set_data(self, data, Fs):
-        data, freqs, t, im = specgram(data, NFFT=256, Fs=Fs, noverlap=128)
-        self.axes.imshow(data, cmap='bone', extent=[-1,1,-1,1])
-        #self.redraw()
+        self.analyzer.set_data(data, Fs)
+        self.current_view = self.analyzer.max_window
+        
+    def show_data(self):
+        if self.analyzer.Sxx is not None:
+            #Put the spectrogram data on a graph
+            self.axes.pcolormesh(self.analyzer.tmat, self.analyzer.fmat, self.analyzer.Sxx, cmap=plt.get_cmap('gray_r'))
+            
+            #Set the axis scale
+            self.set_axis(self.current_view)
+            
+            #Add a cursor
+            pass
+            
+            
+            
+            #Add the selection box
+            pass
+            
+            
+        else:
+            #show a blank plot, but with correct bounds
+            self.axes.axis(self.current_view)
+
         
         
 
@@ -128,15 +151,19 @@ def main():
     import sys
     from PyQt4 import QtGui
     
-    data = np.random.rand(10000)
-    print data
-    Fs = 500
+    fs = 44100
+    N = 4e5
+    amp = 2 * np.sqrt(2)
+    noise_power = 0.001 * fs / 2
+    time = np.arange(N) / fs
+    freq = np.linspace(1e3, 4e3, N)
+    x = amp * np.sin(2*np.pi*freq*time)
+    x += np.random.normal(scale=np.sqrt(noise_power), size=time.shape)
 
     app = QtGui.QApplication(sys.argv)
     main = AudioGUI()
-    main.set_data(data, Fs)
-
-    main.show()
+    main.set_data(x, fs)
+    main.show_data()
     
     sys.exit(app.exec_())
 
