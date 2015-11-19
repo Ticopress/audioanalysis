@@ -14,13 +14,16 @@ The software is in the initial stages of development.
 
 I have selected a GUI framework for the project - it will use PyQt4, until further notice.
 I have designed the first GUI using Qt Designer.
+I have figured out how to plot spectrograms in the main window
+I have separated Model and View functions into two classes
+I have linked some of the controls to their functions and tested those functions
 
 Short-Term Goals
 ----------------
 
-- Test using the empty Widget in main.ui for a matplotlib Figure
-- Implement programmatic control of graph using zoom buttons and scroll bars
-- Implement open file button to read audio files
+- Implement scroll bar functionality
+- Design a complete data storage system for sound files that can handle files, spectra, motifs, clips, etc.
+- Think about handling when the second panel is in place - separation of data, multiple plots, etc.
 
 Copyright and License
 ---------------------
