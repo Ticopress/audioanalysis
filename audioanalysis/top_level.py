@@ -27,9 +27,14 @@ from PyQt4.uic import loadUiType
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import (
-    FigureCanvasQTAgg as FigureCanvas)
+    FigureCanvasQTAgg as FigureCanvas,
+    NavigationToolbar2QT)
 
-Ui_MainWindow, QMainWindow = loadUiType('main.ui')
+from functools import partial 
+
+from PyQt4 import QtGui
+
+Ui_MainWindow, QMainWindow = loadUiType('main_toolbar.ui')
 
 class AudioGUI(Ui_MainWindow, QMainWindow):
 
@@ -37,91 +42,38 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialization of GUI from Qt Designer
         super(AudioGUI, self).__init__()
         self.setupUi(self)
-        
-        # Linking buttons to functions
-        self.y_zoom_in.clicked.connect(self.yzoom_in)
-        self.y_zoom_out.clicked.connect(self.yzoom_out)
-        self.x_zoom_in.clicked.connect(self.xzoom_in)
-        self.x_zoom_out.clicked.connect(self.xzoom_out)
-        self.spectr_vsb.valueChanged.connect(self.yslide)
-        self.spectr_hsb.valueChanged.connect(self.xslide)
 
         # Initialize the basic plot area
         self.fig = Figure()
         self.axes = self.fig.add_subplot(111)
-        # self.axes.plot(np.random.rand(5))
         self.canvas = FigureCanvas(self.fig)
-        self.spectr_1.insertWidget(0, self.canvas)
+        self.plot_vl.addWidget(self.canvas)
         self.canvas.draw()
+        
+        self.toolbar = SpectrogramNavBar(self.canvas, self.plot_container, coordinates=False)
+        self.plot_vl.addWidget(self.toolbar)
         
         self.analyzer = AudioAnalyzer()
         
-        self.set_axis((0, 1, 0, 1))
+        self.set_axis((0, 10, 0, 10))
+
 
     def redraw(self):
         # self.canvas = FigureCanvas(self.fig)
         self.canvas.draw()
         self.show()
 
-    def yzoom_out(self):
-        yl = self.current_view[2]
-        yh = self.current_view[3]
-        dy = yh - yl
-        yl -= 0.1 * dy
-        yh += 0.1 * dy
-        
-        new_limits = (self.current_view[0], self.current_view[1], yl, yh)
-        
-        self.set_axis(new_limits) 
-        
-    def yzoom_in(self):
-        yl = self.current_view[2]
-        yh = self.current_view[3]
-        dy = yh - yl
-        yl += 0.1 * dy
-        yh -= 0.1 * dy
-        
-        new_limits = (self.current_view[0], self.current_view[1], yl, yh)
-        
-        self.set_axis(new_limits)
-        
-        
-    def xzoom_out(self):
-        xl = self.current_view[0]
-        xh = self.current_view[1]
-        dx = xh - xl
-        xl -= 0.1 * dx
-        xh += 0.1 * dx
-        
-        new_limits = (xl, xh, self.current_view[2], self.current_view[3])
-        
-        self.set_axis(new_limits) 
-               
-    def xzoom_in(self):
-        xl = self.current_view[0]
-        xh = self.current_view[1]
-        dx = xh - xl
-        xl += 0.1 * dx
-        xh -= 0.1 * dx
-        
-        new_limits = (xl, xh, self.current_view[2], self.current_view[3])
-        
-        self.set_axis(new_limits)
-         
-    def yslide(self):
-        print self.spectr_vsb.sliderPosition()
-      
-    def xslide(self):
-        print self.spectr_hsb.sliderPosition()  
         
     def set_axis(self, limits):
         self.axes.axis(limits)
         self.current_view = limits
+        
         self.redraw()
         
     def set_data(self, data, Fs):
         self.analyzer.set_data(data, Fs)
-        self.current_view = self.analyzer.max_window
+        self.set_axis(self.analyzer.max_window)
+        self.toolbar.axis_limits = self.analyzer.max_window
         
     def show_data(self):
         if self.analyzer.Sxx is not None:
@@ -146,10 +98,74 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         
         
+class SpectrogramNavBar(NavigationToolbar2QT):
+    
+    def __init__(self, canvas_, parent_, *args, **kwargs):   
+        self.axis_limits = None
+        
+        #only display buttons we need
+        self.toolitems = (
+            ('Home', 'Reset original view', 'home', 'home'),
+            ('Back', 'Back to  previous view', 'back', 'back'),
+            ('Forward', 'Forward to next view', 'forward', 'forward'),
+            (None, None, None, None),
+            ('Pan', 'Pan axes with left mouse, zoom with right', 'move', 'pan'),
+            ('Zoom', 'Zoom to rectangle', 'zoom_to_rect', 'zoom'),
+            (None, None, None, None),
+            #('Subplots', 'Configure subplots', 'subplots', 'configure_subplots'),
+            ('Save', 'Save the figure', 'filesave', 'save_figure'),
+        )
+        
+        NavigationToolbar2QT.__init__(self, canvas_, parent_, *args, **kwargs)
+    
+    '''Consider redefining the init_toolbar method to let me customize the toolbar more
+    def __init_toolbar__(self):
+        pass
+    '''
+    
+    #define the action of the forward button
+    def forward(self, *args):
+        pass
+    
+    #define the action of the back button
+    def back(self, *args):
+        pass
+    
+    def select(self, *args):
+        #model after pan and zoom functions in backend_bases
+        pass
+    
+    #model the following functions after press_pan, release_pan, and drag_pan functions in backend_bases
+    def press_select(self, *args):
+        pass
+    
+    def release_select(self, *args):
+        pass
+    
+    def drag_select(self, *args):
+        pass
+    
+    #Overwrite the release zoom function to allow for left-click zoom in, right-click zoom out
+    #def release_zoom(self, *args):
+    #   pass
+    
+    #Overwrite the drag_pan function to account for axis bounds
+    def drag_pan(self, *args):
+        pass
+    
+    def out_of_bounds(self, axes_to_check):
+        if self.axis_limits is None:
+            return False
+        
+            
+            
+    def constrain_to_bounds(self, axes_to_constrain):
+        pass
+    
 
 def main():
     import sys
-    from PyQt4 import QtGui
+
     
     fs = 44100
     N = 4e5
@@ -162,8 +178,8 @@ def main():
 
     app = QtGui.QApplication(sys.argv)
     main = AudioGUI()
-    main.set_data(x, fs)
-    main.show_data()
+    #main.set_data(x, fs)
+    #main.show_data()
     
     sys.exit(app.exec_())
 

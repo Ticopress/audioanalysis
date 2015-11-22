@@ -46,6 +46,11 @@ class AudioAnalyzer():
         self.f = None
         self.Sxx = None
         self.audio_key = None
+        self.max_window = None
+        self.selection = None
+        self.marker = None
+        self.tmat = None
+        self.fmat = None
     
     def set_data(self, data, Fs):
         self.data = data
