@@ -7,14 +7,14 @@ Copyright 2015 Justin Palpant
 
 This file is part of the Jarvis Lab Audio Analysis program.
 
-Audio Analysis is free software: you can redistribute it and/or modify it under the
-terms of the GNU General Public License as published by the Free Software
+Audio Analysis is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
 version.
 
-Audio Analysis is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the GNU General Public License for more details.
+Audio Analysis is distributed in the hope that it will be useful, but WITHOUT 
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS 
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
@@ -30,22 +30,29 @@ from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT)
 
-from functools import partial 
-
 from PyQt4 import QtGui
+import multimethod
 
-Ui_MainWindow, QMainWindow = loadUiType('main_toolbar.ui')
+Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
 class AudioGUI(Ui_MainWindow, QMainWindow):
+    """AudioGUI docstring goes here TODO
+    
+    
+    """
+    
 
     def __init__(self,):
+        """Initialization docstring goes here
+        
+        
+        """
         #Initialization of GUI from Qt Designer
         super(AudioGUI, self).__init__()
         self.setupUi(self)
 
         # Initialize the basic plot area
         self.fig = Figure()
-        self.axes = self.fig.add_subplot(111)
         self.canvas = FigureCanvas(self.fig)
         self.plot_vl.addWidget(self.canvas)
         self.canvas.draw()
@@ -54,34 +61,58 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.plot_vl.addWidget(self.toolbar)
         
         self.analyzer = AudioAnalyzer()
+        self.analyzer.fft_width = 512
+        self.analyzer.overlap = 482
         
-        self.set_axis((0, 10, 0, 10))
-
-
+        #Set up button callbacks
+        self.open_file.clicked.connect(self.file_open_dialog)
+        
+        #Initialize the collection of assorted parameters
+        #Not currently customizable, maybe will make interface later
+        self.params = {'downsampling':1}
+        
+        self.redraw()
+    
+    def file_open_dialog(self):
+        text = "Hi I am not a file"
+        
+        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Open file', 
+                '/home', 'WAV files (*.wav)')
+        
+        if file_name is not None:
+            self.file_name.setText(file_name)
+            
+        self.analyzer.import_wavfile(file_name, self.params['downsampling'])
+        
+        self.show_data()
+        
     def redraw(self):
+        """Simple """
         # self.canvas = FigureCanvas(self.fig)
         self.canvas.draw()
         self.show()
-
-        
-    def set_axis(self, limits):
-        self.axes.axis(limits)
-        self.current_view = limits
-        
-        self.redraw()
-        
-    def set_data(self, data, Fs):
-        self.analyzer.set_data(data, Fs)
-        self.set_axis(self.analyzer.max_window)
-        self.toolbar.axis_limits = self.analyzer.max_window
         
     def show_data(self):
         if self.analyzer.Sxx is not None:
-            #Put the spectrogram data on a graph
-            self.axes.pcolormesh(self.analyzer.tmat, self.analyzer.fmat, self.analyzer.Sxx, cmap=plt.get_cmap('gray_r'))
+            #Put the spectrogram data on a graph  
+            if not self.toolbar.axis_list:
+                self.toolbar.add_axis(self.analyzer.domain, 
+                        self.analyzer.freq_range, 'spectrogram') 
             
-            #Set the axis scale
-            self.set_axis(self.current_view)
+            self.toolbar.set_domain_bound(self.analyzer.domain)        
+            self.toolbar.set_domain(self.analyzer.domain)
+            self.toolbar.set_axis('spectrogram', self.analyzer.freq_range)
+                 
+            self.toolbar.get_axis('spectrogram').pcolormesh(
+                    self.analyzer.tmesh, self.analyzer.fmesh,
+                    self.analyzer.Sxx, cmap='gray_r')
+            
+            self.redraw()
+            #Zoom to the correct domain and range
+            
+            
+            
+            
             
             #Add a cursor
             pass
@@ -90,24 +121,32 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
             #Add the selection box
             pass
-            
-            
-        else:
-            #show a blank plot, but with correct bounds
-            self.axes.axis(self.current_view)
-
         
         
 class SpectrogramNavBar(NavigationToolbar2QT):
+    """SpectrogramNavBar docstring goes here TODO
     
-    def __init__(self, canvas_, parent_, *args, **kwargs):   
-        self.axis_limits = None
+    
+    """
+    
+    
+    def __init__(self, canvas_, parent_, *args, **kwargs):  
+        """Initialization docstring goes here TODO
         
-        #only display buttons we need
+        
+        """ 
+        #A single, unified set of x-boundaries, never violable
+        self.axis_xlims = ()
+        
+        #Dictionary mapping str->axis object
+        self.axis_dict = {}
+        #Ordered list of axis names, in order added
+        self.axis_names = []
+        
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
-            ('Back', 'Back to  previous view', 'back', 'back'),
-            ('Forward', 'Forward to next view', 'forward', 'forward'),
+            ('Back', 'Scroll left', 'back', 'back'),
+            ('Forward', 'Scroll right', 'forward', 'forward'),
             (None, None, None, None),
             ('Pan', 'Pan axes with left mouse, zoom with right', 'move', 'pan'),
             ('Zoom', 'Zoom to rectangle', 'zoom_to_rect', 'zoom'),
@@ -118,24 +157,49 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         NavigationToolbar2QT.__init__(self, canvas_, parent_, *args, **kwargs)
     
-    '''Consider redefining the init_toolbar method to let me customize the toolbar more
+    '''Consider redefining the init_toolbar method to let me customize the handling of self.toolitems more
     def __init_toolbar__(self):
         pass
     '''
-    
-    #define the action of the forward button
-    def forward(self, *args):
+        
+    def add_axis(self, name, init_x=None, init_y=None):
+        if not self.axis_dict:
+            self.axis_dict[name] = self.canvas.figure.add_subplot(111)
+            self.axis_names.append(name)
+            if init_x is not None:
+                self.set_domain(init_x)
+            if init_y is not None:
+                self.set_range(name, init_y)
+        else:
+            self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
+            self.axis_names.append(name)
+            if init_y is not None:
+                self.set_range(name, init_y)
+
+    def set_domain_bound(self, x_limits):
+        self.axis_xlims = x_limits
+        
+    def set_domain(self, x_domain):
         pass
     
-    #define the action of the back button
+    def set_range(self, name, yrange):
+        pass
+    
+    def set_all_ranges(self, yranges):
+        for idx, yrange in enumerate(yranges):
+            self.set_axis(self.axis_names[idx], yrange)
+        
+            
+    """def forward(self, *args):
+
+        
+    
     def back(self, *args):
         pass
     
     def select(self, *args):
-        #model after pan and zoom functions in backend_bases
         pass
     
-    #model the following functions after press_pan, release_pan, and drag_pan functions in backend_bases
     def press_select(self, *args):
         pass
     
@@ -145,41 +209,32 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     def drag_select(self, *args):
         pass
     
-    #Overwrite the release zoom function to allow for left-click zoom in, right-click zoom out
-    #def release_zoom(self, *args):
-    #   pass
-    
-    #Overwrite the drag_pan function to account for axis bounds
-    def drag_pan(self, *args):
-        pass
-    
-    def out_of_bounds(self, axes_to_check):
-        if self.axis_limits is None:
-            return False
+    def release_zoom(self, *args):
+       pass
+    """
+    def drag_pan(self, event):
+        """Overwrites the original NavigationToolbar2 drag_pan callback
         
-            
-            
-    def constrain_to_bounds(self, axes_to_constrain):
-        pass
-    
+        Adjusted to make sure limits are maintained
+        """
+        
+        for a, ind in self._xypress:
+            #safer to use the recorded button at the press than current button:
+            #multiple buttons can get pressed during motion...
 
+            a.drag_pan(self._button_pressed, event.key, event.x, event.y)
+            
+        self.dynamic_update()
+    
+       
+        
+           
 def main():
     import sys
 
-    
-    fs = 44100
-    N = 4e5
-    amp = 2 * np.sqrt(2)
-    noise_power = 0.001 * fs / 2
-    time = np.arange(N) / fs
-    freq = np.linspace(1e3, 4e3, N)
-    x = amp * np.sin(2*np.pi*freq*time)
-    x += np.random.normal(scale=np.sqrt(noise_power), size=time.shape)
-
     app = QtGui.QApplication(sys.argv)
     main = AudioGUI()
-    #main.set_data(x, fs)
-    #main.show_data()
+
     
     sys.exit(app.exec_())
 
