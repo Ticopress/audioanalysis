@@ -21,17 +21,14 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
 
 from freqanalysis import AudioAnalyzer
-import numpy as np
 from PyQt4.uic import loadUiType
 
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT)
 
 from PyQt4 import QtGui
-import multimethod
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
@@ -43,7 +40,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     
 
     def __init__(self,):
-        """Initialization docstring goes here
+        """Initialization docstring goes here TODO
         
         
         """
@@ -61,21 +58,20 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.plot_vl.addWidget(self.toolbar)
         
         self.analyzer = AudioAnalyzer()
-        self.analyzer.fft_width = 512
-        self.analyzer.overlap = 482
         
         #Set up button callbacks
         self.open_file.clicked.connect(self.file_open_dialog)
         
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
-        self.params = {'downsampling':1}
+        self.params = {'downsampling':1, 'time_downsample':2, 
+                       'freq_downsample':1, 'display_threshold':-400}
         
         self.redraw()
     
     def file_open_dialog(self):
-        text = "Hi I am not a file"
-        
+        """Provide a standard file open dialog to import .wav data into the 
+        model classes"""        
         file_name = QtGui.QFileDialog.getOpenFileName(self, 'Open file', 
                 '/home', 'WAV files (*.wav)')
         
@@ -87,32 +83,40 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.show_data()
         
     def redraw(self):
-        """Simple """
-        # self.canvas = FigureCanvas(self.fig)
+        """Basic refresh operation for all plots"""
         self.canvas.draw()
         self.show()
         
     def show_data(self):
+        """Put all applicable data from the Model to the View
+        
+        This function assumes all preprocessing has been completed and merely
+        looks at the state of the model and displays it
+        """
         if self.analyzer.Sxx is not None:
             #Put the spectrogram data on a graph  
-            if not self.toolbar.axis_list:
-                self.toolbar.add_axis(self.analyzer.domain, 
-                        self.analyzer.freq_range, 'spectrogram') 
+            if not self.toolbar.axis_dict:
+                print self.toolbar.axis_dict
+                self.toolbar.add_axis('spectrogram', 
+                        init_x=self.analyzer.domain, 
+                        init_y=self.analyzer.freq_range) 
+              
+            print self.toolbar.axis_dict
             
+            t_step = self.params['time_downsample']
+            f_step = self.params['freq_downsample']
+            self.toolbar.axis_dict['spectrogram'].pcolormesh(
+                    self.analyzer.tmesh[::t_step,::f_step], 
+                    self.analyzer.fmesh[::t_step,::f_step],
+                    self.analyzer.Sxx[::t_step,::f_step], cmap='gray_r',
+                    vmin = self.params['display_threshold'],
+                    vmax = 0)
+              
             self.toolbar.set_domain_bound(self.analyzer.domain)        
             self.toolbar.set_domain(self.analyzer.domain)
-            self.toolbar.set_axis('spectrogram', self.analyzer.freq_range)
-                 
-            self.toolbar.get_axis('spectrogram').pcolormesh(
-                    self.analyzer.tmesh, self.analyzer.fmesh,
-                    self.analyzer.Sxx, cmap='gray_r')
+            self.toolbar.set_range('spectrogram', self.analyzer.freq_range)
             
             self.redraw()
-            #Zoom to the correct domain and range
-            
-            
-            
-            
             
             #Add a cursor
             pass
@@ -135,6 +139,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         
         """ 
+        
         #A single, unified set of x-boundaries, never violable
         self.axis_xlims = ()
         
@@ -157,7 +162,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         NavigationToolbar2QT.__init__(self, canvas_, parent_, *args, **kwargs)
     
-    '''Consider redefining the init_toolbar method to let me customize the handling of self.toolitems more
+    '''Consider redefining the init_toolbar method to let me customize the 
+    handling of self.toolitems more
+    
     def __init_toolbar__(self):
         pass
     '''
@@ -190,8 +197,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             self.set_axis(self.axis_names[idx], yrange)
         
             
-    """def forward(self, *args):
-
+    """
+    def forward(self, *args):
+        pass
         
     
     def back(self, *args):
