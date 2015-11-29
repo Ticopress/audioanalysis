@@ -12,18 +12,21 @@ Current State
 
 The software is in the initial stages of development.
 
-I have selected a GUI framework for the project - it will use PyQt4, until further notice.
-I have designed the first GUI using Qt Designer.
-I have figured out how to plot spectrograms in the main window
-I have separated Model and View functions into two classes
-I have linked some of the controls to their functions and tested those functions
+-I have selected a GUI framework for the project - it will use PyQt4, until further notice.
+-I have designed the first GUI using Qt Designer.
+-I have figured out how to plot spectrograms in the main window
+-I have separated Model and View functions into two classes
+-I have linked some of the UI controls to their functions and tested those functions
+-I have subclassed the NavigationToolbar2 and started to replace its functions for navigation
+-I have implemented much of the backend included a pure Python Neural Network class that will be used for song recognition
 
 Short-Term Goals
 ----------------
 
-- Implement scroll bar functionality
-- Design a complete data storage system for sound files that can handle files, spectra, motifs, clips, etc.
-- Think about handling when the second panel is in place - separation of data, multiple plots, etc.
+-Implement back-prop for the Neural Network class
+-Implement UI for selection and neural network training
+-Finish navigation handling for spectrograms
+-Implement calculation of entropy and amplitude in backend
 
 Copyright and License
 ---------------------
