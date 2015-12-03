@@ -24,6 +24,7 @@ from freqanalysis import AudioAnalyzer
 from PyQt4.uic import loadUiType
 
 from matplotlib.figure import Figure
+from matplotlib.colorbar import ColorbarBase
 from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT)
@@ -54,7 +55,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.plot_vl.addWidget(self.canvas)
         self.canvas.draw()
         
-        self.toolbar = SpectrogramNavBar(self.canvas, self.plot_container, coordinates=False)
+        self.toolbar = SpectrogramNavBar(self.canvas, self.plot_container)
         self.plot_vl.addWidget(self.toolbar)
         
         self.analyzer = AudioAnalyzer()
@@ -97,22 +98,22 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             #Put the spectrogram data on a graph  
             if not self.toolbar.axis_dict:
                 print self.toolbar.axis_dict
-                self.toolbar.add_axis('spectrogram', 
-                        init_x=self.analyzer.domain, 
-                        init_y=self.analyzer.freq_range) 
+                self.toolbar.add_axis('spectrogram') 
               
             print self.toolbar.axis_dict
             
             t_step = self.params['time_downsample']
             f_step = self.params['freq_downsample']
+            
             self.toolbar.axis_dict['spectrogram'].pcolormesh(
                     self.analyzer.tmesh[::t_step,::f_step], 
                     self.analyzer.fmesh[::t_step,::f_step],
-                    self.analyzer.Sxx[::t_step,::f_step], cmap='gray_r',
-                    vmin = self.params['display_threshold'],
-                    vmax = 0)
+                    self.analyzer.Sxx[::t_step,::f_step], cmap='gray_r')
+            
+            #cbar = ColorbarBase(self.toolbar.axis_dict['spectrogram'], cmap='gray_r')
+            #cbar.set_clim(self.params['display_threshold'], 0)
               
-            self.toolbar.set_domain_bound(self.analyzer.domain)        
+            self.toolbar.set_domain_limits(self.analyzer.domain)        
             self.toolbar.set_domain(self.analyzer.domain)
             self.toolbar.set_range('spectrogram', self.analyzer.freq_range)
             
@@ -141,13 +142,12 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         """ 
         
         #A single, unified set of x-boundaries, never violable
-        self.axis_xlims = ()
-        
+        self.x_constraint = ()
         #Dictionary mapping str->axis object
         self.axis_dict = {}
         #Ordered list of axis names, in order added
         self.axis_names = []
-        
+            
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
             ('Back', 'Scroll left', 'back', 'back'),
@@ -167,44 +167,93 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     
     def __init_toolbar__(self):
         pass
-    '''
-        
-    def add_axis(self, name, init_x=None, init_y=None):
+    '''  
+    def add_axis(self, name, init_x=(), init_y=()):
         if not self.axis_dict:
             self.axis_dict[name] = self.canvas.figure.add_subplot(111)
             self.axis_names.append(name)
-            if init_x is not None:
+            if init_x:
                 self.set_domain(init_x)
-            if init_y is not None:
+            if init_y:
                 self.set_range(name, init_y)
         else:
             self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
             self.axis_names.append(name)
-            if init_y is not None:
+            if init_y:
                 self.set_range(name, init_y)
 
-    def set_domain_bound(self, x_limits):
-        self.axis_xlims = x_limits
+    def set_domain_limits(self, x_constrain):
+        self.x_constraint = x_constrain
         
     def set_domain(self, x_domain):
-        pass
+        if self.x_constraint:
+            try:
+                assert x_domain[0] > self.x_constraint[0] 
+                assert x_domain[1] < self.x_constraint[1]
+            except AssertionError:
+                print "Assert failed: the sdomain command is out of bounds"
+                return
+            
+        for ax in self.axis_dict.values():
+            yrange = ax.get_ylim()
+            new_bounds = (x_domain[0], x_domain[1], yrange[0], yrange[1])
+            ax.axis(new_bounds)
     
     def set_range(self, name, yrange):
-        pass
+        ax = self.axis_dict[name]
+        xbounds = self.get_domain()
+        new_bounds = (xbounds[0], xbounds[1], yrange[0], yrange[1])
+        ax.axis(new_bounds)
+        
     
     def set_all_ranges(self, yranges):
-        for idx, yrange in enumerate(yranges):
-            self.set_axis(self.axis_names[idx], yrange)
-        
+        try:
+            for idx, yrange in enumerate(yranges):
+                self.set_range(self.axis_names[idx], yrange)
+        except IndexError:
+            print ('Too many yranges provided, there are only', 
+                    len(self.axis_names)+1, 'axes available')
             
-    """
+            
+
     def forward(self, *args):
-        pass
-        
-    
+        try:
+            axes = self.axis_dict.values()
+            ax = axes[0]
+        except IndexError:
+            print "Scrolling irrelevant, no plots at this time"
+        else:
+            xbounds = ax.get_xlim()
+            width = xbounds[1] - xbounds[0]
+            if xbounds[1]+0.25*width < self.x_constraint[1]:
+                dx = 0.25*width
+            else:
+                dx = self.x_constraint[1] - xbounds[1]
+                
+            new_bounds = (xbounds[0]+dx, xbounds[1]+dx)
+            
+            self.set_domain(new_bounds)
+     
     def back(self, *args):
-        pass
+        try:
+            axes = self.axis_dict.values()
+            ax = axes[0]
+        except IndexError:
+            print "Scrolling irrelevant, no plots at this time"
+        else:
+            xbounds = ax.get_xlim()
+            width = xbounds[1] - xbounds[0]
+            if xbounds[0]-0.25*width > self.x_constraint[0]:
+                dx = 0.25*width
+            else:
+                dx = xbounds[0] - self.x_constraint[0]
+                
+            new_bounds = (xbounds[0]-dx, xbounds[1]-dx)
+            
+            self.set_domain(new_bounds)
     
+    
+    """
     def select(self, *args):
         pass
     
@@ -226,15 +275,24 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         Adjusted to make sure limits are maintained
         """
         
-        for a, ind in self._xypress:
+        for a, _ in self._xypress:
             #safer to use the recorded button at the press than current button:
             #multiple buttons can get pressed during motion...
-
+            pre_drag = a.get_xlim()
             a.drag_pan(self._button_pressed, event.key, event.x, event.y)
+            post_drag = a.get_xlim()
+            
+            correct_xlims = post_drag if self.validate(post_drag) else pre_drag
+            
+            self.set_domain(correct_xlims)
             
         self.dynamic_update()
     
-       
+    def validate(self, xlims):
+        if not self.x_constraint:
+            return True
+        else:
+            return xlims[0] > self.x_constraint[0] and xlims[1] < self.x_constraint[1]
         
            
 def main():
