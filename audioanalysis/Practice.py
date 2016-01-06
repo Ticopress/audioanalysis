@@ -14,16 +14,15 @@ from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.utils import np_utils
 
-if __name__ == '__main__':
 
-    
+
+def main():   
     '''
         Train a simple convnet on the MNIST dataset.
         Run on GPU: THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python mnist_cnn.py
         Get to 99.25% test accuracy after 12 epochs (there is still a lot of margin for parameter tuning).
         16 seconds per epoch on a GRID K520 GPU.
     '''
-    
     batch_size = 16
     nb_classes = 10
     nb_epoch = 1
@@ -78,3 +77,7 @@ if __name__ == '__main__':
     score = model.evaluate(X_test, Y_test, show_accuracy=True, verbose=0)
     print('Test score:', score[0])
     print('Test accuracy:', score[1])
+    
+if __name__ == '__main__':
+    main()
+    

@@ -21,13 +21,9 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 """
 
 from scipy import signal
-from functools import partial
 from scikits.audiolab import Sndfile
-import time
 import numpy as np
-
-
-    
+import logging, math, sys
 
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
@@ -38,66 +34,66 @@ class AudioAnalyzer():
     def __init__(self):
         """Constructor docstrings goes here TODO
         """
+        self.logger = logging.getLogger('AudioAnalyzer.logger')
         
         #Spectrogram parameters
         self.window = ('hamming')
-        self.fft_width = 512
+        self.fft_width = 256
         self.nfft = 512
         self.time_step_ms = 2
         self.detrend = 'constant'
         self.onesided = True
         self.scaling = 'density'
-        #Spectrogram inputs
-        self.data = None
-        self.Fs = None
-        self.chunked = None
-        #Spectrogram outputs
+        
+        #Information about all songs, and about the currently active one
+        self.songs = []
+        
+        self.active_song = None
+        self.Sxx = None
         self.t = None
         self.f = None
-        self.Sxx = None
-        #Maximum time domain
-        self.domain = None
-        
-        self.selection = None
-        #Location (index) of the audio marker for playback
-        self.marker = None
-        #Meshes for plotting
         self.tmesh = None
         self.fmesh = None
-        #Critical statistics
+        self.domain = None
+        self.freq_range = None
+        self.marker = None
+        self.selection = None
+        
         self.entropy = None
         self.amplitude = None
-        #NeuralNet for classification
-        self.neural_net = None
-        #Integer array of class assigned to each point, whether by human or NN
         self.classification = None
-        self.class_labels = []
-        #ndarray of NN output, fuzzy one-hot encoded class predicted for each
-        #time point
-        self.nn_output = None
+        
+        
         
     
-    def set_data(self, data, Fs):
-        """Take an ndarray representing an audio signal and process it.
-        
-        This setter executes the bulk of the preprocessing of a signal.  It
-        generates the STFT/spectrogram of the data, including both the time and
-        frequency vectors and meshes.  It generates the entropy and amplitude
-        vectors, and any other statistics of merit to be implemented in the
-        future. It resets the marker location, the current selection, and a
-        default classification of the data.
+    def set_active(self, idx):
+        """Select a songfile from the current list of files and designate one
+        as the active songfile
         """
+        
+        if self.active_song:
+            self.update_songfile(self.active_song, self.t, self.classification)
+        
+        self.active_song = self.songs[idx]
+        self.process(self.active_song)
     
-        self.data = data
-        self.Fs = Fs
+    def process(self, sf):
+        """Take a songfile and using its data, create the processed statistics
+        
+        
+        """
+        noverlap = self.fft_width - sf.Fs/1000 * self.time_step_ms
+        noverlap = noverlap if noverlap > 0 else 0
 
-        (self.f, self.t, self.Sxx) = signal.spectrogram(self.data, fs=self.Fs,
+        (self.f, self.t, self.Sxx) = signal.spectrogram(sf.data, fs=sf.Fs,
                 window=self.window, nperseg=self.fft_width, 
-                noverlap=(self.fft_width - self.Fs/1000 * self.time_step_ms), 
+                noverlap=noverlap, 
                 detrend=self.detrend, return_onesided=self.onesided, 
                 scaling=self.scaling, nfft=self.nfft)
         
         self.Sxx = np.log10(self.Sxx)
+        self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(self.Sxx))
+        self.logger.debug('STFT dimensions %s', str(self.Sxx.shape))
         
         self.domain = (min(self.t), max(self.t))
         self.freq_range = (min(self.f), max(self.f))
@@ -109,26 +105,19 @@ class AudioAnalyzer():
         self.entropy = np.zeros(self.t.size)
         self.amplitude = np.zeros(self.t.size)
         self.classification = np.zeros(self.t.size)
-    
-    def import_wavfile(self, filename, downsampling=None):
-        """Import a .wav file with downsampling from a file and process it"""
-
-        f = Sndfile(str(filename), mode='r')
-        frames_to_read = f.nframes - (f.nframes % self.fft_width)
-        data = f.read_frames(frames_to_read)
-        fs = f.samplerate
         
-        if data.ndim is not 1:
-            data = data[:, 0]
-        
-        if downsampling is not None:
-            fs = fs/downsampling
-            data = data[::downsampling]    
-        
-        self.set_data(data, fs)
+    def update_songfile(self, sf, new_t=None, new_class=None):
+        """A setter for the attributes of a songfile that AudioAnalyzer will
+        need to be able to write to.  May go away later"""
+        if new_t:
+            sf.t = new_t
+        if new_class:
+            sf.classification = new_class
  
     def class_integer_to_vectorized(self, int_classification):
-        """Convert the integer class values to a one-hot vector encoding
+        """DEPRECATED.  Exists in np_utils, I think
+        
+        Convert the integer class values to a one-hot vector encoding
         
         The class NeuralNetwork requires a one-hot encoding for output state.
         That is, if there are three states (0,1,2) possible, it expects that
@@ -256,354 +245,78 @@ class AudioAnalyzer():
             coeffs = coeffs[N/2:]
                 
         return np.multiply(coeffs, data)
-        
-        
-        
-class NeuralNetwork:
-    """NN docstring goes here TODO
-    
-    
-    """
-    
-    
-    def __init__(self, sample_input, **kwargs):
-        """Create an ANN based from a template
-        
-        This method uses a sample input array, the number of categories,
-        and the size of each hidden layer to construct a set of weight arrays 
-        for each node of the neural network.
-        
-        The general forward-prop format is Node_next = Weights_last * node_last
-        Note the left-multiplication of the weights matrix means that each
-        weights matrix will have dimensions (next_height x previous_height)
-        
-        Keyword Arguments:
-            'init_mode': method used for initializing weight arrays. Defaults
-                to 'random', which is mean-zero random values
-            'num_categories': number of output categories. Default 1
-            'hidden_layer_sizes': Nx1 ndarray where each value is the size of
-                the output of that layer. Default, [], yields a single-layer NN
-            'prop_func': the nonlinear activation function used in propagation.
-                Must be Numpy ndarray compliant, defaults to a sigmoid function.
-                Must have a kwarg deriv=T/F such that it outputs its own
-                derivative if derif=True
-            'learning_rate': a value on (0, 1) the affects the rate of training.
-                Defaults to 0.5
-        """
-        
-        #Parse kwargs
-        init_mode = kwargs.get('init_mode', 'random')
-        self.n_output = kwargs.get('num_categories', 1)
-        hidden_layer_sizes = kwargs.get('hidden_layer_sizes', np.zeros(0))
-        self.prop_function = kwargs.get('prop_func', self.sigmoid)
 
-        self.rate = kwargs.get('learning_rate', 0.8)
-        self.input_function = kwargs.get('input_func', 
-                partial(self.linear, slope=1))
-        self.output_function = kwargs.get('output_func', 
-                self.sigmoid)
+class SongFile:
+    """Class for storing data related to each song
+    
+    Critical values like entropy, STFT, and amplitude are not held in this class
+    because they are memory expensive.  Only one set of critical values will
+    be stored in memory at a time, and that will be for the active song as
+    determined by the AudioAnalyzer class.
+
+    Instead, this stores the basic song data: Fs, analog signal data"""
+    
+    
+    def __init__(self, data, Fs):
+        self.logger = logging.getLogger('SongFile.logger')
         
-        try:   
-            assert (sample_input.size is not 0)
+        self.data = data
+        self.Fs = Fs
+        
+        self.t = None
+        self.classification = None
+        
+        self.id = None
+        
+        
+    @classmethod
+    def load(cls, filename, split=600, downsampling=None):
+        """Loads a file, splitting it into multiple SongFiles if necessary
+        
+        Inputs: 
+            filename: a .WAV file path in filename
+            split: a length, in seconds, at which the audio file should be split.
+                Defaults to 600 seconds, or 10 minutes, if not specified
+            downsampling: the integer ratio by which the song should be sampled
+        
+        Returns an array of SongFiles"""
+        
+        f = Sndfile(filename, mode='r')
+        data = f.read_frames(f.nframes)
+        fs = f.samplerate
+        
+        if data.ndim is not 1:
+            data = data[:, 0]
+        
+        if downsampling:
+            fs = fs/downsampling
+            data = data[::downsampling]  
+                
+        if split:
+            nperfile = split * fs
+            split_count = int(np.ceil(data.shape[0]/nperfile))
+        else:
+            nperfile = data.shape[0]
+            split_count = 1
+            if nperfile / fs > 600:
+                logging.getLogger('SongFile.Loading.logger').warning(
+                        'Current song is %d seconds long and is not'
+                        ' split.  This may cause substantial memory use and '
+                        'lead to a program crash.  It is recommended to either '
+                        'enable splitting or use a shorter file for NN training'
+                        , nperfile/fs)
             
-            self.input_size = sample_input.size
+        sfs = []
+        
+        for i in range(0, split_count):
+            next_sf = cls(data[i*nperfile:(i+1)*nperfile], fs)
             
-            assert self.n_output > 0
+            fname = filename
+            start = i*nperfile/fs
+            end = (i+1)*nperfile/fs
             
+            next_sf.id = (fname, start, end)
             
-            assert all(hidden_layer_sizes > 0)
-            size_list = [self.input_size]
-            size_list.extend(hidden_layer_sizes)
-
-            #Initialize the list of weight matrices by iterating pairwise
-            #over the sizes of successive layers
-            self.hidden_weights = []
-            np.random.seed(1)
-            for index, size in enumerate(size_list[:-1]): 
-                print 'First weight!!'
-                current, next_ = size, size_list[index + 1]
-                self.hidden_weights.append(self.init_weights(current,
-                        next_, init_mode))
-            
-            self.output_weights = self.init_weights(size_list[-1], 
-                    self.n_output, init_mode)   
-            
-        except (AssertionError, AttributeError):
-            print "Invalid inputs were provided for ANN initialization"
+            sfs.append(next_sf)
     
-    def init_weights(self, size_layer_in, size_layer_out, mode):
-        """Generate an initial weights matrix based on input and output size
-        
-        Allows for future variability in weights matrix initialization, but
-        for the moment all matrices are initialized as zero-mean random weights
-        """
-        
-        if mode=='random':
-            return 2*np.random.random((size_layer_out, size_layer_in)) - 1   
-        
-    def train(self, data_in, classes_in, **kwargs):
-        """Take a set of inputs and the classification vector for each input
-        and train the ANN
-        
-        Inputs:
-            data_in: an ndarray with columns representing each sample input
-            classes_in: an ndarray with columns representing the correct
-                function value for the corresponding column of the input
-            
-        Keyword Arguments:
-            chunk_size: an integer representing the number of inputs that
-                should be processed at once.  Defaults to the number of columns
-                of data_in (the entire dataset in one pass).  A tradeoff
-                between speed and memory is used here, where processing the
-                entire input is fastest but requires the most memory
-            iterations: the number of times that the entire data set should be
-                passed through the neural net and errors should be back-
-                propagated during training.  Defaults to a 1, a single time
-            
-        Output:
-            None
-        """
-        try:
-            assert(data_in.shape[1] == classes_in.shape[1])
-        except (AssertionError):
-            print 'Number of inputs and number of outputs do not match'
-            return
-        
-        #Process kwargs
-        chunk_size = kwargs.get('chunk_size', data_in.shape[1])
-        iterations = kwargs.get('iterations', 1)
-        
-        for i in range(iterations):
-            #Break the data into 'small' chunks and process each chunk
-            for j in range(data_in.shape[1]/chunk_size):
-                #Grab a full chunk of data if possible
-                if (j+1)*chunk_size < data_in.shape[1]:
-                    data = data_in[:,j*chunk_size:(j+1)*chunk_size]
-                    correct_output = classes_in[:,j*chunk_size:(j+1)*chunk_size]
-                #if a full chunk is too large, just finish off the data
-                else:
-                    data = data_in[:,j*chunk_size:]
-                    correct_output = classes_in[:,j*chunk_size:]
-
-                #Forward-prop with storage of all node stages and slopes
-                node_inputs = []
-                node_outputs = []
-                node_slopes = []
-
-                #Process the input node
-                current_input = data
-                current_output = self.input_function(current_input)
-                current_slope = self.input_function(current_input, deriv=True)
-                
-                #print "Input node in: ",current_input
-                #print "Input node out: ",current_output
-                #print "Input node slope: ",current_slope
-                
-                node_inputs.append(current_input)
-                node_outputs.append(current_output)
-                node_slopes.append(current_slope)
-                
-                #Process hidden nodes, if any
-                for w in self.hidden_weights:
-                    current_input = w.dot(current_output)
-                    current_output = self.prop_function(current_input)
-                    current_slope = self.prop_function(current_input, deriv=True)
-                    node_inputs.append(current_input)
-                    node_outputs.append(current_output)
-                    node_slopes.append(current_slope)
-
-                #Process the final (output) node
-                current_input = self.output_weights.dot(current_output)
-                current_output = self.output_function(current_input)
-                current_slope = self.output_function(current_input, deriv=True)
-
-                node_inputs.append(current_input)
-                node_outputs.append(current_output)
-                node_slopes.append(current_slope)
-                
-                #print "Output node in: ",current_input
-                #print "Output node out: ",current_output
-                #print "Output node slope: ",current_slope
-                
-                #Back-prop of error
-                node_errors = []
-                node_deltas = []
-                
-                current_error = current_output - correct_output
-                current_delta = np.multiply(current_slope, current_error)
-                
-                node_errors.append(current_error)
-                node_deltas.append(current_delta)
-                
-                #print "Output node error: ", current_error
-                #print "Output node delta: ", current_delta
-                
-                #This is the error on either the input node or the last hidden
-                #node, depending on if there are any hidden nodes
-                current_error = self.output_weights.T.dot(current_delta)
-                
-                for idx, w in enumerate(reversed(self.hidden_weights)):
-                    #Access the node slopes in reverse order; skip the output
-                    #node slope (idx = -1) because it was already used
-                    current_node_slope = node_slopes[-2-idx]
-                    current_delta = np.multiply(current_node_slope, current_error)
-                    
-                    node_deltas.append(current_delta)
-                    node_errors.append(current_error)
-                    
-                    current_error = w.T.dot(current_delta)
-                    
-                #For the last node, the input node - don't HAVE to do anything,
-                #but for completeness and demonstration, show the following
-                current_delta = np.multiply(node_slopes[0], current_error)
-                
-                node_deltas.append(current_delta)
-                node_errors.append(current_error)
-                
-                #Put them in the initial order you total idiot
-                node_deltas.reverse()
-                node_errors.reverse()
-                
-                weights_update = []
-                
-                #Loop over all node outputs except the last
-                for idx, node_output in enumerate(node_outputs[:-1]):
-                    #print "Output used for weights update: ",node_output
-                    next_delta = node_deltas[idx+1]
-                    #print "Deltas used: ", next_delta
-                    update = -self.rate * next_delta.dot(node_output.T)
-                    weights_update.append(update)
-                
-                for idx, w in enumerate(self.hidden_weights):
-                    self.hidden_weights[idx] = w + weights_update[idx]
-                    
-                #print "updating output weights by",weights_update[-1]
-                #print "current output weights",self.output_weights
-                self.output_weights += weights_update[-1]
-                print "updated output weights",self.output_weights
-
-                
-            if i % np.ceil(iterations / 100.0) == 0:
-                print i+1,' of ',iterations,' training iterations complete'
-                print 'Current error norm: ',np.linalg.norm(node_errors[-1])
-                
-    
-    def estimate(self, data_in, **kwargs):
-        """Take a set of inputs and return the estimated value of the function
-        that the neural net is attempting to imitate.  
-        
-        Inputs:
-            data_in: an ndarray with columns representing each sample input.
-                Note that the ndarray MUST be columnar - i.e., even if the
-                inputs are single numbers, the shape of data_in must be a 
-                single row of dimension (1,N) where N is the number of inputs, 
-                not a single column of shape (N,), which is default.
-            
-        Keyword Arguments:
-            chunk_size: an integer representing the number of inputs that
-                should be processed at once.  Defaults to the number of columns
-                of data_in (the entire dataset in one pass).  A tradeoff
-                between speed and memory is used here, where processing the
-                entire input is fastest but requires the most memory
-                
-        Output:
-            An ndarray with each column being the function estimation vector
-            for the corresponding input column.  The classification vector
-            can be 1x1 in the case of estimating a 1D functions y = f(x), 
-            or it can be a multidimensional output for multidimensional
-            functions or for classification of a piece of data into
-            categories where each vector element represents the similarity
-            of the data element to the element's corresponding category
-        """
-        #Check for keyword arguments
-        chunk_size = kwargs.get('chunk_size', data_in.shape[1])
-        
-        #Pre-allocate for small speed gains and for slicing
-        estimated_classes = np.zeros((self.n_output, data_in.shape[1]))
-        
-        #Break the data into 'small' chunks and process each chunk
-        for j in range(data_in.shape[1]/chunk_size):
-            node_input = data_in[:,j*chunk_size:(j+1)*chunk_size]
-            node_output = self.input_function(node_input)
-            
-            for w in self.hidden_weights:
-                node_input = w.dot(node_output)
-                node_output = self.prop_function(node_input)
-            
-            final_input = self.output_weights.dot(node_output)
-            final_output = self.output_function(final_input)
-            estimated_classes[:,j*chunk_size:(j+1)*chunk_size] = final_output
-
-        return estimated_classes
-    
-    def sigmoid(self,x,deriv=False):
-        """Take an ndarray and calculate the sigmoid activation function for 
-        each value
-        
-        This is the default propagation function, and is used unless another
-        function is specified in the kwargs of the class __init__
-        """
-        y = np.tanh(x)
-
-        if(deriv):
-            return 1 - y**2
-        
-        return y
-    
-    def linear(self, x, slope = 1, deriv=False):
-        """The default linear input and output activation function"""
-        y = slope*x
-
-        if(deriv):
-            return slope*np.ones(x.shape)
-        
-        return y
-            
-        
-def main():
-    
-    import numpy as np
-    import matplotlib.cm as cm
-    import pylab as pl
-    np.random.seed(1337) # for reproducibility
-    
-    from keras.datasets import mnist
-    from keras.models import Sequential
-    from keras.layers import containers
-    from keras.layers.core import Dense, AutoEncoder
-    from keras.optimizers import RMSprop
-    from keras.utils import np_utils
-    
-    batch_size = 64
-    nb_epoch = 1
-    
-    nb_classes = 10
-
-    # the data, shuffled and split between tran and test sets
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    
-    X_train = X_train.reshape(X_train.shape[0], 1, 28, 28)
-    X_test = X_test.reshape(X_test.shape[0], 1, 28, 28)
-    X_train = X_train.astype("float32")
-    X_test = X_test.astype("float32")
-    X_train /= 255
-    X_test /= 255
-    print('X_train shape:', X_train.shape)
-    print(X_train.shape[0], 'train samples')
-    print(X_test.shape[0], 'test samples')
-    
-    # convert class vectors to binary class matrices
-
-    Y_train = np_utils.to_categorical(y_train, nb_classes)
-    Y_test = np_utils.to_categorical(y_test, nb_classes)
-
-    i = 4600
-    pl.imshow(X_train[i, 0], interpolation='nearest', cmap=cm.binary)
-    print("label : ", Y_train[i,:])
-    pl.show()
-    
-    
-    
-if __name__ == '__main__':
-    main()        
-        
+        return sfs
