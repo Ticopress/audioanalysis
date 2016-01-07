@@ -31,59 +31,64 @@ class AudioAnalyzer():
     """
 
     
-    def __init__(self):
+    def __init__(self, **params):
         """Constructor docstrings goes here TODO
         """
         self.logger = logging.getLogger('AudioAnalyzer.logger')
         
-        #Spectrogram parameters
-        self.window = ('hamming')
-        self.fft_width = 256
-        self.nfft = 512
-        self.time_step_ms = 2
-        self.detrend = 'constant'
-        self.onesided = True
-        self.scaling = 'density'
-        self.process_chunk = 15
+        #Set spectrogram and neural net parameters
+        self.update_params(params)
         
-        #Information about all songs, and about the currently active one
+        #List of loaded songs
         self.songs = []
-        
+        #Reference to and spectrogram of currently active song
         self.active_song = None
         self.Sxx = None
-        self.time = None
-        self.freq = None
-        self.tmesh = None
-        self.fmesh = None
-        self.domain = None
-        self.freq_range = None
-        self.marker = None
-        self.selection = None
         
-        self.entropy = None
-        self.amplitude = None
-        self.classification = None
+        #Reference to the neural net used for processing
+        self.nn = None
         
+    def update_params(self, params):
+        """Sets the value of key spectrogram and neural net parameters"""
         
+        self.nfft = params.get('nfft', 512)
+        self.time_window_ms = params.get('fft_time_window_ms', 10)
+        self.time_step_ms = params.get('fft_time_step_ms', 2)
+        self.process_chunk = params.get('process_chunk_s', 15) 
         
     
     def set_active(self, idx):
-        """Select a songfile from the current list of files and designate one
-        as the active songfile
+        """Select a SongFile from the current list and designate one as the 
+        active SongFile
         """
         
-        if self.active_song:
-            self.update_songfile(self.active_song, self.time, self.classification)
+        try:
+            self.active_song = self.songs[idx]
+        except IndexError:
+            self.logger.error('There are not %d loaded songs, cannot set active', idx)
+        else:
+            self.Sxx = self.process(self.active_song)
         
-        self.active_song = self.songs[idx]
-        self.process(self.active_song)
+        
+    def start_playback(self, time):
+        pass
+    
+    def stop_playback(self):
+        pass
+        
+        
+    def play_audio_callback(self, in_data, frame_count, time_info, status):
+        pass
     
     def process(self, sf):
         """Take a songfile and using its data, create the processed statistics
         
-        
+        This method both updates the data stored in the SongFile (for those
+        values that are stored there) and RETURNS the calculated spectrogram of
+        the SongFile.  You must catch the returned value and save it, it is not
+        written to self.Sxx by default
         """
-        noverlap = self.fft_width - sf.Fs/1000 * self.time_step_ms
+        noverlap = (self.time_window_ms - self.time_step_ms)* sf.Fs/1000
         noverlap = noverlap if noverlap > 0 else 0
         
         if sf.data.shape[0] > self.process_chunk * sf.Fs:
@@ -92,50 +97,55 @@ class AudioAnalyzer():
         else:
             split_count = 1
             nchunk = sf.data.shape[0]
+            
+        nperseg = self.time_window_ms * sf.Fs / 1000
+        
+        if self.nfft < nperseg:
+            nfft = 2**np.ceil(np.log2(nperseg))
+            self.logger.warning('NFFT (%d) cannot be less than the number of '
+                    'samples in each time window (%d).  Temporarily increasing '
+                    'nfft to %d, which will require more memory.  To avoid this,'
+                    ' decrease FFT Time Window in the parameters menu.', 
+                    self.nfft, nperseg, nfft)
+        else:
+            nfft = self.nfft
          
         for i in range(0, split_count):
-            self.logger.info('Processing songfile part %d of %d', i+1, split_count)
-            (self.freq, self.time_part, self.Sxx_part) = signal.spectrogram(
+            self.logger.info('Processing songfile from %d seconds to %d seconds', 
+                    i*self.process_chunk, (i+1)*self.process_chunk)
+            (freq, time_part, Sxx_part) = signal.spectrogram(
                     sf.data[i*nchunk:(i+1)*nchunk], 
                     fs=sf.Fs,
-                    window=self.window, 
-                    nperseg=self.fft_width, 
-                    noverlap=noverlap, 
-                    detrend=self.detrend, 
-                    return_onesided=self.onesided, 
-                    scaling=self.scaling, 
-                    nfft=self.nfft
+                    nfft=nfft,  #number of bins; must be 2^z
+                    nperseg=nperseg, #width in time domain
+                    noverlap=noverlap, #overlap in time domain
+                    detrend='constant', 
+                    return_onesided=True, 
+                    scaling='density', 
+                    window=('hamming'), 
                     )
             if i == 0:
-                self.time = self.time_part
-                self.Sxx = self.Sxx_part
+                time = time_part
+                Sxx = Sxx_part
             else:
-                self.time = np.append(self.time, self.time[-1]+self.time_part)
-                self.Sxx = np.hstack((self.Sxx, self.Sxx_part))
-            
+                time = np.append(time, time[-1]+time_part)
+                Sxx = np.hstack((Sxx, Sxx_part))
+           
         
-        self.Sxx = 10*np.log10(self.Sxx)
-        self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(self.Sxx))
-        self.logger.debug('STFT dimensions %s', str(self.Sxx.shape))
-        
-        self.domain = (min(self.time), max(self.time))
-        self.freq_range = (min(self.freq), max(self.freq))
-        self.marker = min(self.time)
-        self.selection = None
+        Sxx = 10*np.log10(Sxx)
+        self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(Sxx))
+        self.logger.debug('STFT dimensions %s', str(Sxx.shape))
                         
-        self.entropy = np.zeros(self.time.size)
-        self.amplitude = np.zeros(self.time.size)
-        self.classification = np.zeros(self.time.size)
+        sf.entropy = np.zeros(time.size)
+        sf.amplitude = np.zeros(time.size)
+        sf.classification = np.zeros(time.size)
+        sf.time = time
+        sf.freq = freq
         
-    def update_songfile(self, sf, new_t=None, new_class=None):
-        """A setter for the attributes of a songfile that AudioAnalyzer will
-        need to be able to write to.  May go away later"""
-        if new_t is not None:
-            sf.time = new_t
-        if new_class is not None:
-            sf.classification = new_class
+        return Sxx
  
-    def class_integer_to_vectorized(self, int_classification):
+    @staticmethod
+    def class_integer_to_vectorized(int_classification):
         """DEPRECATED.  Exists in np_utils, I think
         
         Convert the integer class values to a one-hot vector encoding
@@ -160,7 +170,8 @@ class AudioAnalyzer():
             
         return nn_vectors
     
-    def class_vectorized_to_integer(self, nn_vector_classifications, **kwargs):
+    @staticmethod
+    def class_vectorized_to_integer(nn_vector_classifications, **kwargs):
         """Convert a classification ndarray created by a NeuralNetwork to a
         set of integer classification labels
         
@@ -208,7 +219,7 @@ class AudioAnalyzer():
                 side = 'left'
             
             subset = nn_vector_classifications[:, left:right:1]
-            windowed = self.apply_window(subset, window_type, side=side, 
+            windowed = AudioAnalyzer.apply_window(subset, window_type, side=side, 
                     **new_kwargs)
             windowed_average = windowed.mean(1)
             new_classification[idx] = windowed_average.argmax()
@@ -221,7 +232,8 @@ class AudioAnalyzer():
         """
         pass
     
-    def apply_window(self, data, window_type, **kwargs):
+    @staticmethod
+    def apply_window(data, window_type, **kwargs):
         """Takes a window from a set of standard windows and applies it to a
         classification (in integer or vectorized format).
         
@@ -280,14 +292,36 @@ class SongFile:
     def __init__(self, data, Fs):
         self.logger = logging.getLogger('SongFile.logger')
         
+        #Values passed into the init
         self.data = data
         self.Fs = Fs
         
-        self.time = None
-        self.classification = None
+        #Post-processed values (does not include spectrogram)
+        self.time = []
+        self.freq = []
+        self.classification = []
         
-        self.id = None
         
+        #Values set manually or by the load classmethod
+        self.fname = None
+        self.start = None
+        self.end = None
+     
+    @property
+    def domain(self):
+        try:
+            return (min(self.time), max(self.time))
+        except ValueError:
+            self.logger.warning('Songfile not processed, domain not available')
+            return ()
+        
+    @property    
+    def range(self):
+        try:
+            return (min(self.freq), max(self.freq))
+        except ValueError:
+            self.logger.warning('Songfile not processed, range not available')
+            return ()   
         
     @classmethod
     def load(cls, filename, split=300, downsampling=None):

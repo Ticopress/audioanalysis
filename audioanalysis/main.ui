@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>739</width>
-    <height>473</height>
+    <width>732</width>
+    <height>540</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -115,7 +115,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_3">
         <item>
-         <widget class="QPushButton" name="play">
+         <widget class="QPushButton" name="play_button">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
             <horstretch>0</horstretch>
@@ -123,7 +123,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string/>
+           <string>Play Song</string>
           </property>
           <property name="icon">
            <iconset>
@@ -135,28 +135,27 @@
             <height>24</height>
            </size>
           </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
+          </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pause">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
+         <widget class="QTimeEdit" name="timeEdit">
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::UpDownArrows</enum>
           </property>
-          <property name="text">
-           <string/>
+          <property name="currentSection">
+           <enum>QDateTimeEdit::HourSection</enum>
           </property>
-          <property name="icon">
-           <iconset>
-            <normaloff>icons/pause.png</normaloff>icons/pause.png</iconset>
+          <property name="displayFormat">
+           <string>hh:mm:ss.sss</string>
           </property>
-          <property name="iconSize">
-           <size>
-            <width>24</width>
-            <height>24</height>
-           </size>
+          <property name="timeSpec">
+           <enum>Qt::OffsetFromUTC</enum>
           </property>
          </widget>
         </item>
@@ -229,7 +228,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>739</width>
+     <width>732</width>
      <height>22</height>
     </rect>
    </property>

@@ -70,16 +70,20 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.toolbar = SpectrogramNavBar(self.canvas, self.plot_container)
         self.plot_vl.addWidget(self.toolbar)
         
-        self.analyzer = AudioAnalyzer()
-        
         #Set up button callbacks
         self.open_file.clicked.connect(self.file_open_dialog)
+        self.play_button.clicked.connect(self.click_play_button)
         
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 'display_threshold':-400, 
-                       'split':600, 'vmin':-90, 'vmax':-20}
+                       'split':600, 'vmin':-90, 'vmax':-20, 'nfft':512, 
+                       'fft_time_window_ms':10, 'fft_time_step_ms':2, 
+                       'process_chunk_s':15,
+                       }
+            
+        self.analyzer = AudioAnalyzer(**self.params)
         
         self.canvas.draw_idle()
         self.show()
@@ -106,7 +110,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                             downsampling=self.params['load_downsampling']
                             )
             
-            self.logger.info('Loaded %s as %d SongFiles', str(file_name), len(new_songs))
+            self.logger.info('Loaded %s as %d SongFiles', str(file_name), 
+                    len(new_songs))
             
             self.analyzer.songs.extend(new_songs)
             
@@ -116,7 +121,16 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         else:
             self.logger.debug('Cancelled file select')
+    
+    def click_play_button(self):
+        if self.play_button.isChecked():
+            self.logger.debug('Playback started')
+            self.analyzer.start_playback(self.toolbar.playback)
+        else:
+            self.logger.debug('Ending playback')  
+            self.analyzer.stop_playback()
         
+    
     def show_data(self):
         """Put all applicable data from the Model to the View
         
@@ -126,8 +140,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.display_spectrogram()
 
         self.display_classification()
+        
+        
+        self.toolbar.x_constraint = self.analyzer.active_song.domain       
+        self.toolbar.set_domain(self.analyzer.active_song.domain)
 
     def display_spectrogram(self):
+        """Fetches spectrogram data from analyzer and plots it
+        
+        NO display method affects the domain in any way.  That must be done
+        external to the display method
+        """
         try:
             ax = self.toolbar.axis_dict['spectrogram']
         except KeyError:
@@ -136,15 +159,24 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                       
         t_step = self.params['time_downsample_disp']
         f_step = self.params['freq_downsample_disp']
-        
-        time = self.analyzer.time[::t_step]
-        freq = self.analyzer.freq[::f_step]
+    
+        try:   
+            time = self.analyzer.active_song.time[::t_step]
+            freq = self.analyzer.active_song.freq[::f_step]
+        except AttributeError:
+            self.logger.error('No active song, cannot display spectrogram')
+            return
+            
+        try: 
+            disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
+        except AttributeError:
+            self.logger.error('No calculated spectrogram, cannot display')
+            return
         
         halfbin_time = (time[1] - time[0]) / 2.0
         halfbin_freq = (freq[1] - freq[0]) / 2.0
         
         # this method is much much faster!
-        disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
         # center bin
         extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
                   freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
@@ -159,20 +191,27 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         ax.axis('tight')
   
-        self.toolbar.x_constraint = self.analyzer.domain       
-        self.toolbar.set_domain(self.analyzer.domain)
-        self.toolbar.set_range('spectrogram', self.analyzer.freq_range)        
+        self.toolbar.set_range('spectrogram', self.analyzer.active_song.range)        
         self.canvas.draw_idle()
     
     def display_classification(self):
+        """Fetches classification data from analyzer and plots it
+        
+        NO display method affects the domain in any way.  That must be done
+        external to the display method
+        """
         try:
             ax = self.toolbar.axis_dict['classification']
         except KeyError:
             self.toolbar.add_axis('classification')
             ax = self.toolbar.axis_dict['classification']
             
-        classes = self.analyzer.classification
-        time = self.analyzer.time
+        try:
+            classes = self.analyzer.active_song.classification
+            time = self.analyzer.active_song.time
+        except AttributeError:
+            self.logger.error('No active song to display')
+            return
         
         if ax.lines:
             ax.lines.remove(ax.lines[0])
@@ -183,17 +222,22 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         self.canvas.draw_idle()
         
-
     def keyPressEvent(self, e):
+        """Listens for a keypress
+        
+        If the keypress is a number and a region has been selected with the
+        select tool, the keypress will assign the value of that number to be
+        the classification of the selected region
+        """
         if (e.text() in [str(i) for i in range(10)] and 
                 self.toolbar.current_selection):
-            indices = np.searchsorted(self.analyzer.time, 
+            indices = np.searchsorted(self.analyzer.active_song.time, 
                     np.asarray(self.toolbar.current_selection))
             
-            self.analyzer.classification[indices[0]:indices[1]] = int(e.text())
+            self.analyzer.active_song.classification[indices[0]:indices[1]] = int(e.text())
             
             self.logger.debug('Updating class from %s to be %d', 
-                    str(self.analyzer.time[indices]), int(e.text()))
+                    str(self.analyzer.active_song.time[indices]), int(e.text()))
         
             self.display_classification()
             self.toolbar.remove_rubberband()
@@ -224,9 +268,10 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     
     
     def __init__(self, canvas_, parent_, *args, **kwargs):  
-        """Initialization docstring goes here TODO
+        """Creates a SpectrogramNavigationBar instance
         
-        
+        This method initializes logging, creates an empty dictionary of axes,
+        an empty selection
         """ 
         
         #initialize logging
@@ -317,7 +362,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         """Set the domain for ALL plots (which must share an x-axis domain)"""
         
         try:
-            assert self.validate(x_domain)
+            assert self.valid(x_domain)
         except AssertionError:
             self.logger.warning("Assert failed: the domain command %s is" 
                     "out of bounds", str(x_domain))
@@ -365,6 +410,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self.logger.debug('Clicked the forward button')
         
+        self.remove_rubberband()
+        self.current_selection = ()
+        
         try:
             ax = self.axis_dict[self.axis_names[0]]
         except IndexError:
@@ -389,6 +437,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self.logger.debug('Clicked the back button')
         
+        self.remove_rubberband()
+        self.current_selection = ()
+        
         try:
             ax = self.axis_dict[self.axis_names[0]]
         except IndexError:
@@ -403,7 +454,18 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 
             new_bounds = (xbounds[0]-dx, xbounds[1]-dx)
             
-            self.set_domain(new_bounds)
+            self.set_domain(new_bounds)        
+     
+    def home(self, *args):
+        save_dict = {}
+        for name, ax in self.axis_dict.items():
+            if name != 'spectrogram':
+                save_dict[name] = ax.get_ylim()
+                
+        super(SpectrogramNavBar, self).home(*args) 
+         
+        for name, lim in save_dict.items():
+            self.set_range(name, lim) 
             
     def drag_pan(self, event):
         """OVERRIDE the drag_pan function in backend_bases.NavigationToolbar2
@@ -414,13 +476,27 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         for a, _ in self._xypress:
             #safer to use the recorded button at the press than current button:
             #multiple buttons can get pressed during motion...
-            pre_drag = a.get_xlim()
+            pre_drag_x = a.get_xlim()
+            pre_drag_y = a.get_ylim()
             a.drag_pan(self._button_pressed, event.key, event.x, event.y)
             
-            if not self.validate(a.get_xlim()):
-                self.set_domain(pre_drag)
+            if not self.valid(a.get_xlim()):
+                self.set_domain(pre_drag_x)
+                
+            if a is not self.axis_dict['spectrogram']:
+                a.set_ylim(pre_drag_y)
             
         self.dynamic_update()
+
+    def pan(self, *args):
+        self.remove_rubberband()
+        self.current_selection = ()
+        super(SpectrogramNavBar, self).pan(*args)
+        
+    def zoom(self, *args):
+        self.remove_rubberband()
+        self.current_selection = ()
+        super(SpectrogramNavBar, self).zoom(*args)
         
     def release_zoom(self, event):
         """OVERRIDE the release_zoom method in backend_bases.NavigationToolbar2
@@ -473,8 +549,8 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         a._set_view_from_bbox((lastx, lasty, x, y), direction,
                               self._zoom_mode, False, False)
         
-        if not self.validate(a.get_xlim()):
-            self.set_domain(self.x_constraint)
+        if not self.valid(a.get_xlim()):
+            self.set_domain(self.validate(a.get_xlim()))
 
         self.draw()
         self._xypress = None
@@ -487,8 +563,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     
     def _update_buttons_checked(self):
         # sync button checkstates to match active mode
-        self._actions['pan'].setChecked(self._active == 'PAN')
-        self._actions['zoom'].setChecked(self._active == 'ZOOM')
+        super(SpectrogramNavBar, self)._update_buttons_checked()
         self._actions['select'].setChecked(self._active == 'SELECT')
     
     def select(self, *args):
@@ -600,9 +675,11 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                     self.current_selection = (self._select_start, event.xdata)
                 else:
                     self.current_selection = (event.xdata, self._select_start)
-                    
-                self.logger.debug('Selection set to %s', 
-                        str(self.current_selection))
+                
+                
+                self.playback = self.current_selection[0]  
+                self.logger.debug('Selection set to %s and playback marker to %0.4f', 
+                        str(self.current_selection), self.playback)
 
         self.draw()
         self._xypress = None
@@ -647,13 +724,22 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                     self._lastCursor != cursors.SELECT_REGION):
                 self.set_cursor(cursors.SELECT_REGION)
     
-    def validate(self, xlims):
+    def valid(self, xlims):
+        if not xlims:
+            return False
         if not self.x_constraint:
             return True
         else:
             return xlims[0] >= self.x_constraint[0] and xlims[1] <= self.x_constraint[1]
         
- 
+    def validate(self, xlims):
+        if self.valid(xlims):
+            return xlims
+        else:
+            return (max(xlims[0], self.x_constraint[0]), min(xlims[1], self.x_constraint[1]))
+        
+        
+        
 class OutLog:
     '''OutLog pipes output from a stream to a QTextEdit widget
     
