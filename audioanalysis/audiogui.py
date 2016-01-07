@@ -57,8 +57,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        sys.stdout = OutLog(self.console, sys.stdout)
-        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        #sys.stdout = OutLog(self.console, sys.stdout)
+        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
         logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
@@ -73,6 +73,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Set up button callbacks
         self.open_file.clicked.connect(self.file_open_dialog)
         self.play_button.clicked.connect(self.click_play_button)
+        
+        #Set up SpectrogramNavBar signal callbacks
+        self.marker = 0
+        self.current_selection = ()
+        self.connect(self.toolbar, QtCore.SIGNAL("set_marker"), self.set_marker)
+        self.connect(self.toolbar, QtCore.SIGNAL("set_selection"), self.set_selection)
         
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
@@ -125,7 +131,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def click_play_button(self):
         if self.play_button.isChecked():
             self.logger.debug('Playback started')
-            self.analyzer.start_playback(self.toolbar.playback)
+            self.analyzer.start_playback(self.toolbar.marker)
         else:
             self.logger.debug('Ending playback')  
             self.analyzer.stop_playback()
@@ -141,6 +147,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         self.display_classification()
         
+        self.set_marker(0)
+        self.set_selection(())
         
         self.toolbar.x_constraint = self.analyzer.active_song.domain       
         self.toolbar.set_domain(self.analyzer.active_song.domain)
@@ -230,9 +238,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         the classification of the selected region
         """
         if (e.text() in [str(i) for i in range(10)] and 
-                self.toolbar.current_selection):
+                self.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time, 
-                    np.asarray(self.toolbar.current_selection))
+                    np.asarray(self.current_selection))
             
             self.analyzer.active_song.classification[indices[0]:indices[1]] = int(e.text())
             
@@ -240,10 +248,35 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     str(self.analyzer.active_song.time[indices]), int(e.text()))
         
             self.display_classification()
+            self.set_selection(())
+    
+    def set_selection(self, sel):
+        if not sel:
             self.toolbar.remove_rubberband()
-            self.toolbar.current_selection = ()
-                
-                
+            self.current_selection = ()
+        else:
+            self.current_selection = sel
+            
+        self.logger.debug('Selection set to %s', str(self.current_selection))
+    
+    def set_marker(self, marker):
+        try:
+            ax = self.toolbar.axis_dict['marker']
+        except KeyError:
+            self.toolbar.add_axis('marker')
+            ax = self.toolbar.axis_dict['marker']
+        
+        self.marker = marker
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
+        self.toolbar.set_range('marker', (0,1))
+        self.canvas.draw_idle()
+        
+        self.logger.debug('Playback marker set to %0.4f', self.marker)
+
         
         
 class SpectrogramNavBar(NavigationToolbar2QT):
@@ -276,18 +309,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         #initialize logging
         self.logger = logging.getLogger('NavBar.logger')
-        
-        #A single, unified set of x-boundaries, never violable
-        self.x_constraint = ()
-        #Dictionary mapping str->axis object
-        self.axis_dict = {}
-        #Ordered list of axis names, in order added
-        self.axis_names = []
-        
-        self.current_selection = ()
-        self.playback = 0
-        
-        self.image = None
             
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
@@ -300,6 +321,17 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             ('Save', 'Save the figure', 'filesave', 'save_figure'),
         )
         
+        NavigationToolbar2QT.__init__(self, canvas_, parent_, coordinates=False)
+                
+        #A single, unified set of x-boundaries, never violable
+        self.x_constraint = ()
+        #Dictionary mapping str->axis object
+        self.axis_dict = {}
+        #Ordered list of axis names, in order added
+        self.axis_names = []
+        
+        self.image = None
+                
         self.custom_toolitems = (
             (None, None, None, None),
             ('Select', 'Cursor with click, select with drag', 'select1', 'select'),
@@ -307,8 +339,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 
         self.icons_dir = os.path.join(os.path.dirname(__file__), 'icons')
         self.logger.debug('Icons directory %s', self.icons_dir)
-        
-        NavigationToolbar2QT.__init__(self, canvas_, parent_, coordinates=False)
 
         for a in self.findChildren(QtGui.QAction):
             if a.text() == 'Customize':
@@ -342,22 +372,19 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.logger.debug('Icon image file %s', imagefile)
         return QtGui.QIcon(imagefile)
          
-    def add_axis(self, name, init_x=(), init_y=()):
+    def add_axis(self, name):
         """Add one axis to this plot, and associate it with name"""
         
         if not self.axis_dict:
             self.axis_dict[name] = self.canvas.figure.add_subplot(111)
             self.axis_names.append(name)
-            if init_x:
-                self.set_domain(init_x)
-            if init_y:
-                self.set_range(name, init_y)
         else:
             self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
             self.axis_names.append(name)
-            if init_y:
-                self.set_range(name, init_y)
                 
+        if name in ['marker', 'classification']:
+            self.axis_dict[name].yaxis.set_visible(False)
+     
     def set_domain(self, x_domain):
         """Set the domain for ALL plots (which must share an x-axis domain)"""
         
@@ -410,8 +437,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self.logger.debug('Clicked the forward button')
         
-        self.remove_rubberband()
-        self.current_selection = ()
+        self.emit(QtCore.SIGNAL('set_selection', ()))
         
         try:
             ax = self.axis_dict[self.axis_names[0]]
@@ -437,8 +463,8 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self.logger.debug('Clicked the back button')
         
-        self.remove_rubberband()
-        self.current_selection = ()
+
+        self.emit(QtCore.SIGNAL('set_selection', ()))
         
         try:
             ax = self.axis_dict[self.axis_names[0]]
@@ -489,13 +515,11 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.dynamic_update()
 
     def pan(self, *args):
-        self.remove_rubberband()
-        self.current_selection = ()
+        self.emit(QtCore.SIGNAL('set_selection', ()))
         super(SpectrogramNavBar, self).pan(*args)
         
     def zoom(self, *args):
-        self.remove_rubberband()
-        self.current_selection = ()
+        self.emit(QtCore.SIGNAL('set_selection', ()))
         super(SpectrogramNavBar, self).zoom(*args)
         
     def release_zoom(self, event):
@@ -659,27 +683,25 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         lastx, lasty, _, _, _ = self._xypress[0]
     
         if self._button_pressed == 3:
-            self.playback = event.xdata
-            self.logger.debug('Playback marker set to %0.4f', self.playback)
-        
+            self.emit(QtCore.SIGNAL('set_marker'), event.xdata)
+    
         elif self._button_pressed == 1:
             # ignore singular clicks - 5 pixels is a threshold
             # allows the user to "cancel" a selection action
             # by selecting by less than 5 pixels
             if (abs(event.x - lastx) < 5 and abs(event.y - lasty) < 5):
                 
-                self.current_selection = ()
+                self.emit(QtCore.SIGNAL('set_selection'), ())
                 
             else:
                 if event.xdata > self._select_start:
-                    self.current_selection = (self._select_start, event.xdata)
+                    sel = (self._select_start, event.xdata)
                 else:
-                    self.current_selection = (event.xdata, self._select_start)
+                    sel = (event.xdata, self._select_start)
                 
-                
-                self.playback = self.current_selection[0]  
-                self.logger.debug('Selection set to %s and playback marker to %0.4f', 
-                        str(self.current_selection), self.playback)
+                self.emit(QtCore.SIGNAL('set_marker'), sel[0])
+                self.emit(QtCore.SIGNAL('set_selection'), sel)
+
 
         self.draw()
         self._xypress = None
