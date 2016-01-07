@@ -12,21 +12,21 @@ Current State
 
 The software is in the initial stages of development.
 
--I have selected a GUI framework for the project - it will use PyQt4, until further notice.
--I have designed the first GUI using Qt Designer.
--I have figured out how to plot spectrograms in the main window efficiently
--I have separated Model and View functions into several classes
--I have linked some of the UI controls to their functions and tested those functions
--I have subclassed the NavigationToolbar2 and customized several navigation functions to make them convenient for spectrogram navigation
--I have implemented Model subclasses for storing song data
--I have implemented efficient chunking of large datasets and efficient data display
+- I have selected a GUI framework for the project - it will use PyQt4, until further notice.
+- I have designed the first GUI using Qt Designer.
+- I have figured out how to plot spectrograms in the main window efficiently
+- I have separated Model and View functions into several classes
+- I have linked some of the UI controls to their functions and tested those functions
+- I have subclassed the NavigationToolbar2 and customized several navigation functions to make them convenient for spectrogram navigation
+- I have implemented Model subclasses for storing song data
+- I have implemented efficient chunking of large datasets and efficient data display
 
 Short-Term Goals
 ----------------
 
--Small updates to UI handling for setting classifications before training
--Implement calculation of entropy and amplitude in backend
--Structure a neural net using Keras.io and the write utilities I need to send data to it for training
+- Small updates to UI handling for setting classifications before training
+- Implement calculation of entropy and amplitude in backend
+- Structure a neural net using Keras.io and the write utilities I need to send data to it for training
 
 Copyright and License
 ---------------------
