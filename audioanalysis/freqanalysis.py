@@ -23,7 +23,7 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 from scipy import signal
 from scikits.audiolab import Sndfile
 import numpy as np
-import logging, math, sys
+import logging, sys, time
 
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
@@ -44,14 +44,15 @@ class AudioAnalyzer():
         self.detrend = 'constant'
         self.onesided = True
         self.scaling = 'density'
+        self.process_chunk = 15
         
         #Information about all songs, and about the currently active one
         self.songs = []
         
         self.active_song = None
         self.Sxx = None
-        self.t = None
-        self.f = None
+        self.time = None
+        self.freq = None
         self.tmesh = None
         self.fmesh = None
         self.domain = None
@@ -72,7 +73,7 @@ class AudioAnalyzer():
         """
         
         if self.active_song:
-            self.update_songfile(self.active_song, self.t, self.classification)
+            self.update_songfile(self.active_song, self.time, self.classification)
         
         self.active_song = self.songs[idx]
         self.process(self.active_song)
@@ -84,34 +85,54 @@ class AudioAnalyzer():
         """
         noverlap = self.fft_width - sf.Fs/1000 * self.time_step_ms
         noverlap = noverlap if noverlap > 0 else 0
-
-        (self.f, self.t, self.Sxx) = signal.spectrogram(sf.data, fs=sf.Fs,
-                window=self.window, nperseg=self.fft_width, 
-                noverlap=noverlap, 
-                detrend=self.detrend, return_onesided=self.onesided, 
-                scaling=self.scaling, nfft=self.nfft)
         
-        self.Sxx = np.log10(self.Sxx)
+        if sf.data.shape[0] > self.process_chunk * sf.Fs:
+            split_count = int(np.ceil(sf.data.shape[0]/(self.process_chunk*sf.Fs)))
+            nchunk = self.process_chunk*sf.Fs
+        else:
+            split_count = 1
+            nchunk = sf.data.shape[0]
+         
+        for i in range(0, split_count):
+            self.logger.info('Processing songfile part %d of %d', i+1, split_count)
+            (self.freq, self.time_part, self.Sxx_part) = signal.spectrogram(
+                    sf.data[i*nchunk:(i+1)*nchunk], 
+                    fs=sf.Fs,
+                    window=self.window, 
+                    nperseg=self.fft_width, 
+                    noverlap=noverlap, 
+                    detrend=self.detrend, 
+                    return_onesided=self.onesided, 
+                    scaling=self.scaling, 
+                    nfft=self.nfft
+                    )
+            if i == 0:
+                self.time = self.time_part
+                self.Sxx = self.Sxx_part
+            else:
+                self.time = np.append(self.time, self.time[-1]+self.time_part)
+                self.Sxx = np.hstack((self.Sxx, self.Sxx_part))
+            
+        
+        self.Sxx = 10*np.log10(self.Sxx)
         self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(self.Sxx))
         self.logger.debug('STFT dimensions %s', str(self.Sxx.shape))
         
-        self.domain = (min(self.t), max(self.t))
-        self.freq_range = (min(self.f), max(self.f))
-        self.marker = min(self.t)
+        self.domain = (min(self.time), max(self.time))
+        self.freq_range = (min(self.freq), max(self.freq))
+        self.marker = min(self.time)
         self.selection = None
-        
-        self.tmesh, self.fmesh = np.meshgrid(self.t, self.f)
-                
-        self.entropy = np.zeros(self.t.size)
-        self.amplitude = np.zeros(self.t.size)
-        self.classification = np.zeros(self.t.size)
+                        
+        self.entropy = np.zeros(self.time.size)
+        self.amplitude = np.zeros(self.time.size)
+        self.classification = np.zeros(self.time.size)
         
     def update_songfile(self, sf, new_t=None, new_class=None):
         """A setter for the attributes of a songfile that AudioAnalyzer will
         need to be able to write to.  May go away later"""
-        if new_t:
-            sf.t = new_t
-        if new_class:
+        if new_t is not None:
+            sf.time = new_t
+        if new_class is not None:
             sf.classification = new_class
  
     def class_integer_to_vectorized(self, int_classification):
@@ -256,21 +277,20 @@ class SongFile:
 
     Instead, this stores the basic song data: Fs, analog signal data"""
     
-    
     def __init__(self, data, Fs):
         self.logger = logging.getLogger('SongFile.logger')
         
         self.data = data
         self.Fs = Fs
         
-        self.t = None
+        self.time = None
         self.classification = None
         
         self.id = None
         
         
     @classmethod
-    def load(cls, filename, split=600, downsampling=None):
+    def load(cls, filename, split=300, downsampling=None):
         """Loads a file, splitting it into multiple SongFiles if necessary
         
         Inputs: 
@@ -283,7 +303,7 @@ class SongFile:
         
         f = Sndfile(filename, mode='r')
         data = f.read_frames(f.nframes)
-        fs = f.samplerate
+        fs = float(f.samplerate)
         
         if data.ndim is not 1:
             data = data[:, 0]
@@ -298,7 +318,7 @@ class SongFile:
         else:
             nperfile = data.shape[0]
             split_count = 1
-            if nperfile / fs > 600:
+            if nperfile / fs > 300:
                 logging.getLogger('SongFile.Loading.logger').warning(
                         'Current song is %d seconds long and is not'
                         ' split.  This may cause substantial memory use and '
@@ -311,12 +331,23 @@ class SongFile:
         for i in range(0, split_count):
             next_sf = cls(data[i*nperfile:(i+1)*nperfile], fs)
             
-            fname = filename
-            start = i*nperfile/fs
-            end = (i+1)*nperfile/fs
+            next_sf.fname = filename
+            next_sf.start = int(i*nperfile/fs)
+            next_sf.end = int((i+1)*nperfile/fs)
             
-            next_sf.id = (fname, start, end)
             
             sfs.append(next_sf)
-    
+            
         return sfs
+    
+    def __str__(self):
+        return '%s.%04d_%04d'.format(self.fname, self.start, self.end)
+    
+    def __repr__(self):
+        return str(self)
+    
+    def export(self):
+        pass
+    
+    def load_export(self):
+        pass
