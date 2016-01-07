@@ -182,7 +182,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Confirm Selection</string>
+           <string>Confirm Classes</string>
           </property>
           <property name="icon">
            <iconset>
@@ -218,7 +218,7 @@
        <enum>QFrame::Plain</enum>
       </property>
       <property name="readOnly">
-       <bool>false</bool>
+       <bool>true</bool>
       </property>
      </widget>
     </item>
