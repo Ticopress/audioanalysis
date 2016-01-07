@@ -24,16 +24,16 @@ from freqanalysis import AudioAnalyzer, SongFile
 from PyQt4.uic import loadUiType
 
 from matplotlib.figure import Figure
-from matplotlib.colorbar import ColorbarBase
 from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT)
 from matplotlib.backends.qt_compat import QtWidgets
-
+from matplotlib.backend_bases import cursors
 
 from PyQt4 import QtGui, QtCore
 
 import logging, sys, os
+import numpy as np
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
@@ -57,12 +57,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        logstream = OutLog(self.console)
-        logging.basicConfig(level=logging.DEBUG, stream=logstream)
-        
         sys.stdout = OutLog(self.console, sys.stdout)
         sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
         # Initialize the basic plot area
         self.fig = Figure()
@@ -81,7 +79,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Not currently customizable, maybe will make interface later
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 'display_threshold':-400, 
-                       'split':600}
+                       'split':600, 'vmin':-90, 'vmax':-20}
         
         self.canvas.draw_idle()
         self.show()
@@ -103,13 +101,14 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.file_name.setText(file_name)
             
             newest_sf = len(self.analyzer.songs)
-            self.analyzer.songs.extend(
-                    SongFile.load(
-                            str(file_name), 
-                            split=None,
+            new_songs = SongFile.load(
+                            str(file_name),
                             downsampling=self.params['load_downsampling']
                             )
-                    )
+            
+            self.logger.info('Loaded %s as %d SongFiles', str(file_name), len(new_songs))
+            
+            self.analyzer.songs.extend(new_songs)
             
             self.analyzer.set_active(newest_sf)
             
@@ -124,34 +123,103 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         This function assumes all preprocessing has been completed and merely
         looks at the state of the model and displays it
         """
-        if self.analyzer.Sxx is not None:
-            #Put the spectrogram data on a graph  
-            if not self.toolbar.axis_dict:
-                self.toolbar.add_axis('spectrogram') 
-                          
-            t_step = self.params['time_downsample_disp']
-            f_step = self.params['freq_downsample_disp']
-            
-            self.toolbar.axis_dict['spectrogram'].pcolormesh(
-                    self.analyzer.tmesh[::t_step,::f_step], 
-                    self.analyzer.fmesh[::t_step,::f_step],
-                    self.analyzer.Sxx[::t_step,::f_step], cmap='gray_r')
-            
-            #cbar = ColorbarBase(self.toolbar.axis_dict['spectrogram'], cmap='gray_r')
-            #cbar.set_clim(self.params['display_threshold'], 0)
-              
-            self.toolbar.x_constraint = self.analyzer.domain       
-            self.toolbar.set_domain(self.analyzer.domain)
-            self.toolbar.set_range('spectrogram', self.analyzer.freq_range)
-            
-            self.canvas.draw_idle()
+        self.display_spectrogram()
 
+        self.display_classification()
+
+    def display_spectrogram(self):
+        try:
+            ax = self.toolbar.axis_dict['spectrogram']
+        except KeyError:
+            self.toolbar.add_axis('spectrogram') 
+            ax = self.toolbar.axis_dict['spectrogram']
+                      
+        t_step = self.params['time_downsample_disp']
+        f_step = self.params['freq_downsample_disp']
+        
+        time = self.analyzer.time[::t_step]
+        freq = self.analyzer.freq[::f_step]
+        
+        halfbin_time = (time[1] - time[0]) / 2.0
+        halfbin_freq = (freq[1] - freq[0]) / 2.0
+        
+        # this method is much much faster!
+        disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
+        # center bin
+        extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
+                  freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
+        
+        self.toolbar.image = ax.imshow(disp_Sxx, 
+                interpolation="nearest", 
+                extent=extent,
+                cmap='gray_r',
+                vmin=self.params['vmin'],
+                vmax=self.params['vmax']
+                )
+        
+        ax.axis('tight')
+  
+        self.toolbar.x_constraint = self.analyzer.domain       
+        self.toolbar.set_domain(self.analyzer.domain)
+        self.toolbar.set_range('spectrogram', self.analyzer.freq_range)        
+        self.canvas.draw_idle()
+    
+    def display_classification(self):
+        try:
+            ax = self.toolbar.axis_dict['classification']
+        except KeyError:
+            self.toolbar.add_axis('classification')
+            ax = self.toolbar.axis_dict['classification']
+            
+        classes = self.analyzer.classification
+        time = self.analyzer.time
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        ax.plot(time, classes, 'b-')
+        
+        self.toolbar.set_range('classification', (0, max(classes)+1))
+
+        self.canvas.draw_idle()
+        
+
+    def keyPressEvent(self, e):
+        if (e.text() in [str(i) for i in range(10)] and 
+                self.toolbar.current_selection):
+            indices = np.searchsorted(self.analyzer.time, 
+                    np.asarray(self.toolbar.current_selection))
+            
+            self.analyzer.classification[indices[0]:indices[1]] = int(e.text())
+            
+            self.logger.debug('Updating class from %s to be %d', 
+                    str(self.analyzer.time[indices]), int(e.text()))
+        
+            self.display_classification()
+            self.toolbar.remove_rubberband()
+            self.toolbar.current_selection = ()
+                
+                
         
         
 class SpectrogramNavBar(NavigationToolbar2QT):
-    """SpectrogramNavBar docstring goes here TODO
+    """Provides a navigation bar specially configured for spectrogram interaction
     
+    This class overrides a number of the methods of the standard 
+    NavigationToolbar2QT and NavigationToolbar2, and adds some convenience
+    methods.
     
+    Of primary interest is that this class keeps record of all the axes on the
+    plot by name, with independent y scales but a uniform x-scale.  The primary
+    intent of this class is to bound the x-scale so that it is impossible to
+    scroll, pan, or zoom outside of the domain set in the public instance
+    variable x_constraint.  
+    
+    Additionally, the navigation bar tools have been updated.  The left and 
+    right buttons scroll left and right, rather than moving between views.  The 
+    pan and zoom buttons are identical, but with the horizontal bound enforced.  
+    Several buttons are removed, and a 'select' button has been added which
+    is used for manual classification of data.
     """
     
     
@@ -173,6 +241,8 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self.current_selection = ()
         self.playback = 0
+        
+        self.image = None
             
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
@@ -207,7 +277,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 a = self.addAction(self.local_icon(image_file + '.png'),
                         text, getattr(self, callback))
                 self._actions[callback] = a
-                if callback in ['select']:
+                if callback in ['select', 'scale']:
                     a.setCheckable(True)
                 if tooltip_text is not None:
                     a.setToolTip(tooltip_text)
@@ -220,8 +290,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.coordinates = True
                     
         self._idSelect = None
-
-        
+   
     def local_icon(self, name):
         imagefile = os.path.join(self.icons_dir, name)
         
@@ -243,7 +312,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             self.axis_names.append(name)
             if init_y:
                 self.set_range(name, init_y)
-        
+                
     def set_domain(self, x_domain):
         """Set the domain for ALL plots (which must share an x-axis domain)"""
         
@@ -258,14 +327,12 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 
         for name in self.axis_names:
             ax = self.axis_dict[name]
-            self.logger.debug('Setting domain for axis %s', name)
-            yrange = ax.get_ylim()
-            new_bounds = (x_domain[0], x_domain[1], yrange[0], yrange[1])
-            ax.axis(new_bounds)
+            self.logger.debug('Setting domain for axis %s to %s', name, str(x_domain))
+            ax.set_xlim(x_domain)
             
         self.dynamic_update()
     
-    def set_range(self, name, yrange):
+    def set_range(self, name, y_range):
         """Set the y-axis range of the plot associated with name"""
         
         try:
@@ -274,10 +341,8 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             self.logger.warning('No such axis to set the range')
             return
         
-        self.logger.debug('Setting the range of %s to %s', name, str(yrange))
-        xbounds = ax.get_xlim()
-        new_bounds = (xbounds[0], xbounds[1], yrange[0], yrange[1])
-        ax.axis(new_bounds)
+        self.logger.debug('Setting the range of %s to %s', name, str(y_range))
+        ax.set_ylim(y_range)
         
         self.dynamic_update()
     
@@ -339,7 +404,86 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             new_bounds = (xbounds[0]-dx, xbounds[1]-dx)
             
             self.set_domain(new_bounds)
-    
+            
+    def drag_pan(self, event):
+        """OVERRIDE the drag_pan function in backend_bases.NavigationToolbar2
+        
+        Adjusted to make sure limits are maintained
+        """
+        
+        for a, _ in self._xypress:
+            #safer to use the recorded button at the press than current button:
+            #multiple buttons can get pressed during motion...
+            pre_drag = a.get_xlim()
+            a.drag_pan(self._button_pressed, event.key, event.x, event.y)
+            
+            if not self.validate(a.get_xlim()):
+                self.set_domain(pre_drag)
+            
+        self.dynamic_update()
+        
+    def release_zoom(self, event):
+        """OVERRIDE the release_zoom method in backend_bases.NavigationToolbar2
+        
+        Identical function with domain checking added
+        """
+        
+        self.logger.debug('Called release_zoom')
+        
+        for zoom_id in self._ids_zoom:
+            self.canvas.mpl_disconnect(zoom_id)
+        self._ids_zoom = []
+
+        self.remove_rubberband()
+
+        if not self._xypress:
+            return
+
+        x, y = event.x, event.y
+        lastx, lasty, _, _, _ = self._xypress[0]
+        
+        try:
+            a = self.axis_dict['spectrogram']
+        except KeyError:
+            self.logger.warning('No plots, no zooming')
+            return
+        # ignore singular clicks - 5 pixels is a threshold
+        # allows the user to "cancel" a zoom action
+        # by zooming by less than 5 pixels
+        if ((abs(x - lastx) < 5 and self._zoom_mode!="y") or
+                (abs(y - lasty) < 5 and self._zoom_mode!="x")):
+            
+            if self._button_pressed == 1:
+                direction = 'in'
+                
+            elif self._button_pressed == 3:
+                direction = 'out'
+            
+            
+            self._xypress = None
+            self.release(event)
+            self.draw()
+            return
+
+        if self._button_pressed == 1:
+            direction = 'in'
+        elif self._button_pressed == 3:
+            direction = 'out'
+
+        a._set_view_from_bbox((lastx, lasty, x, y), direction,
+                              self._zoom_mode, False, False)
+        
+        if not self.validate(a.get_xlim()):
+            self.set_domain(self.x_constraint)
+
+        self.draw()
+        self._xypress = None
+        self._button_pressed = None
+
+        self._zoom_mode = None
+
+        self.push_current()
+        self.release(event)    
     
     def _update_buttons_checked(self):
         # sync button checkstates to match active mode
@@ -348,9 +492,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self._actions['select'].setChecked(self._active == 'SELECT')
     
     def select(self, *args):
-        self.logger.debug('Clicked the select button')
+        self.logger.debug('Clicked the select button on the toolbar')
         
-        """Activate the pan/zoom tool. pan with left button, zoom with right"""
+        """Activate the select tool. select with left button, set cursor with right"""
         # set the pointer icon and button press funcs to the
         # appropriate callbacks
 
@@ -383,12 +527,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self._update_buttons_checked()
 
-        
-    
     def press_select(self, event):
         """the press mouse button in select mode callback"""
 
-        
         # If we're already in the middle of a zoom, pressing another
         # button works to "cancel"
         self.remove_rubberband()
@@ -403,16 +544,19 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 
         if event.button == 1:
             self._button_pressed = 1
-            self.logger.debug('Pressed left mouse to select region in select mode')
+            self.logger.debug('Pressed left mouse to select region in '
+                    'select mode')
 
         elif event.button == 3:
-            self.logger.debug('Pressed right mouse button to place start mark in select mode')
+            self.logger.debug('Pressed right mouse button to place start mark'
+                    ' in select mode')
             self._button_pressed = 3
         else:
             self._button_pressed = None
             return
 
         x, y = event.x, event.y
+        self._select_start = event.xdata
 
         # push the current view to define home if stack is empty
         if self._views.empty():
@@ -436,36 +580,29 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 
         if not self._xypress:
             return
-        
-        x, y = event.x, event.y
-        lastx, lasty, a, ind, view = self._xypress[0]
+
+        lastx, lasty, _, _, _ = self._xypress[0]
     
         if self._button_pressed == 3:
-            self.playback = x
+            self.playback = event.xdata
             self.logger.debug('Playback marker set to %0.4f', self.playback)
         
         elif self._button_pressed == 1:
             # ignore singular clicks - 5 pixels is a threshold
             # allows the user to "cancel" a selection action
             # by selecting by less than 5 pixels
-            if ((abs(x - lastx) < 5 and self._zoom_mode!="y") or
-                    (abs(y - lasty) < 5 and self._zoom_mode!="x")):
-                
+            if (abs(event.x - lastx) < 5 and abs(event.y - lasty) < 5):
                 
                 self.current_selection = ()
                 
             else:
-                s = event.inaxes.format_coord(event.xdata, event.ydata)
-                self.logger.debug('format_coord yields %s', s)
-                
-                if lastx > x:
-                    self.current_selection = (x, lastx)
+                if event.xdata > self._select_start:
+                    self.current_selection = (self._select_start, event.xdata)
                 else:
-                    self.current_selection = (lastx, x)
+                    self.current_selection = (event.xdata, self._select_start)
                     
-                self.logger.debug('Selection  set to %s', 
+                self.logger.debug('Selection set to %s', 
                         str(self.current_selection))
-
 
         self.draw()
         self._xypress = None
@@ -474,101 +611,41 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.release(event)
     
     def drag_select(self, event):
-        self.logger.debug('Dragged in select mode with button %d', 
-                self._button_pressed)
-        pass
+        
+        if self._button_pressed == 3:
+            return 
+        elif self._button_pressed == 1:
+            if self._xypress:
+                x, y = event.x, event.y
+                lastx, lasty, a, _, _ = self._xypress[0]
     
+                # adjust x, last, y, last
+                x1, y1, x2, y2 = a.bbox.extents
+                x, lastx = max(min(x, lastx), x1), min(max(x, lastx), x2)
+                y, lasty = max(min(y, lasty), y1), min(max(y, lasty), y2)
     
-    def release_zoom(self, event):
-        """OVERRIDE the release_zoom method in backend_bases.NavigationToolbar2
+                self.draw_rubberband(event, x, y, lastx, lasty)
         
-        Identical function with domain checking added
-        """
+    def _set_cursor(self, event):
+        """OVERRIDE the _set_cursor method in backend_bases.NavigationToolbar2"""
         
-        self.logger.debug('Called release_zoom')
-        
-        for zoom_id in self._ids_zoom:
-            self.canvas.mpl_disconnect(zoom_id)
-        self._ids_zoom = []
+        if not event.inaxes or not self._active:
+            if self._lastCursor != cursors.POINTER:
+                self.set_cursor(cursors.POINTER)
+                self._lastCursor = cursors.POINTER
+        else:
+            if self._active == 'ZOOM':
+                if self._lastCursor != cursors.SELECT_REGION:
+                    self.set_cursor(cursors.SELECT_REGION)
+                    self._lastCursor = cursors.SELECT_REGION
+            elif (self._active == 'PAN' and
+                  self._lastCursor != cursors.MOVE):
+                self.set_cursor(cursors.MOVE)
 
-        self.remove_rubberband()
-
-        if not self._xypress:
-            return
-
-        last_a = []
-
-        for cur_xypress in self._xypress:
-            x, y = event.x, event.y
-            lastx, lasty, a, ind, view = cur_xypress
-            # ignore singular clicks - 5 pixels is a threshold
-            # allows the user to "cancel" a zoom action
-            # by zooming by less than 5 pixels
-            if ((abs(x - lastx) < 5 and self._zoom_mode!="y") or
-                    (abs(y - lasty) < 5 and self._zoom_mode!="x")):
-                
-                if self._button_pressed == 1:
-                    direction = 'in'
-                    
-                elif self._button_pressed == 3:
-                    direction = 'out'
-                
-                
-                self._xypress = None
-                self.release(event)
-                self.draw()
-                return
-
-            # detect twinx,y axes and avoid double zooming
-            twinx, twiny = False, False
-            if last_a:
-                for la in last_a:
-                    if a.get_shared_x_axes().joined(a, la):
-                        twinx = True
-                    if a.get_shared_y_axes().joined(a, la):
-                        twiny = True
-            last_a.append(a)
-
-            if self._button_pressed == 1:
-                direction = 'in'
-            elif self._button_pressed == 3:
-                direction = 'out'
-            else:
-                continue
-
-            a._set_view_from_bbox((lastx, lasty, x, y), direction,
-                                  self._zoom_mode, twinx, twiny)
-            
-            if not self.validate(a.get_xlim()):
-                self.set_domain(self.x_constraint)
-
-        self.draw()
-        self._xypress = None
-        self._button_pressed = None
-
-        self._zoom_mode = None
-
-        self.push_current()
-        self.release(event)
-
-    def drag_pan(self, event):
-        """OVERRIDE the drag_pan function in backend_bases.NavigationToolbar2
-        
-        Adjusted to make sure limits are maintained
-        """
-        
-        self.logger.debug('Called drag_pan')
-
-        for a, _ in self._xypress:
-            #safer to use the recorded button at the press than current button:
-            #multiple buttons can get pressed during motion...
-            pre_drag = a.get_xlim()
-            a.drag_pan(self._button_pressed, event.key, event.x, event.y)
-            
-            if not self.validate(a.get_xlim()):
-                self.set_domain(pre_drag)
-            
-        self.dynamic_update()
+                self._lastCursor = cursors.MOVE   
+            elif (self._active == 'SELECT' and
+                    self._lastCursor != cursors.SELECT_REGION):
+                self.set_cursor(cursors.SELECT_REGION)
     
     def validate(self, xlims):
         if not self.x_constraint:
@@ -583,6 +660,7 @@ class OutLog:
     This class is taken exactly from stackoverflow
     http://stackoverflow.com/questions/17132994/pyside-and-python-logging/17145093#17145093
     '''
+    
     
     def __init__(self, edit, out=None, color=None):
         """(edit, out=None, color=None) -> can write stdout, stderr to a
@@ -618,7 +696,6 @@ def main():
     main = AudioGUI()
     
     sys.exit(app.exec_())
-
 
 if __name__ == '__main__':
     main()
