@@ -25,6 +25,10 @@ from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
 import numpy as np
 import logging, sys, time
 
+import keras.layers.core as corelayers
+import keras.layers.convolutional as convlayers
+from keras.models import Sequential
+
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
@@ -47,6 +51,55 @@ class AudioAnalyzer():
         
         #Reference to the neural net used for processing
         self.nn = None
+    
+    def build_neural_net(self):
+        nn = Sequential()
+        
+        layers = self.params.get('layers')
+        
+        for i, layerspec in enumerate(layers):
+            if i==0: #size the input layer correctly
+                try:
+                    layerspec['kwargs']['input_shape'] = (1, len(self.active_song.freq), 1)
+                except (AttributeError, TypeError):
+                    self.logger.error('No active song set, cannot build neural net')
+                    return
+            self.logger.info('Building layer specified by %s', str(layerspec))
+            l = self.make_layer(layerspec)
+            nn.add(l)
+            
+        self.logger.info('Building the output layer for %d classes', self.active_song.num_classes)
+        l = self.make_layer({'type':'Dense', 'args':(self.active_song.num_classes,)})   
+        nn.add(l)
+        l = self.make_layer({'type':'Activation', 'args':('softmax',)})
+        nn.add(l)
+        
+        self.logger.info('Compiling deep neural network')
+        loss = self.params.get('loss', 'categorical_crossentropy')
+        optimizer = self.params.get('optimizer', 'sgd')
+        
+        nn.compile(loss=loss, optimizer=optimizer)
+        
+        return nn
+            
+    def make_layer(self, layerspec):
+        name = layerspec.get('type')
+        
+        try:
+            cls = getattr(corelayers, name)
+        except AttributeError:
+            try:
+                cls = getattr(convlayers, name)
+            except AttributeError as e:
+                self.logger.error('Unreadable layerspec provided, cannot build neural net')
+                raise e
+            
+        args = layerspec.get('args')
+        kwargs = layerspec.get('kwargs')
+        
+        l = cls(*args, **kwargs)
+        
+        return l
     
     def set_active(self, idx):
         """Select a SongFile from the current list and designate one as the 
@@ -291,11 +344,11 @@ class SongFile:
         self.Fs = Fs
         
         #Post-processed values (does not include spectrogram)
-        self.time = []
-        self.freq = []
-        self.classification = []
-        self.entropy = []
-        self.power = []
+        self.time = None
+        self.freq = None
+        self.classification = None
+        self.entropy = None
+        self.power = None
         
         
         #Values set manually or by the load classmethod
@@ -305,19 +358,16 @@ class SongFile:
      
     @property
     def domain(self):
-        try:
-            return (min(self.time), max(self.time))
-        except ValueError:
-            self.logger.warning('Songfile not processed, domain not available')
-            return ()
+        return (min(self.time), max(self.time))
+
         
     @property    
     def range(self):
-        try:
-            return (min(self.freq), max(self.freq))
-        except ValueError:
-            self.logger.warning('Songfile not processed, range not available')
-            return ()   
+        return (min(self.freq), max(self.freq))
+        
+    @property
+    def num_classes(self):
+        return max(self.classification)+1
         
     @classmethod
     def load(cls, filename, split=300, downsampling=None):
