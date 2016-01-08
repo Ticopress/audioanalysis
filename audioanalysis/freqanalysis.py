@@ -37,7 +37,7 @@ class AudioAnalyzer():
         self.logger = logging.getLogger('AudioAnalyzer.logger')
         
         #Set spectrogram and neural net parameters
-        self.update_params(params)
+        self.params = params
         
         #List of loaded songs
         self.songs = []
@@ -47,15 +47,6 @@ class AudioAnalyzer():
         
         #Reference to the neural net used for processing
         self.nn = None
-        
-    def update_params(self, params):
-        """Sets the value of key spectrogram and neural net parameters"""
-        
-        self.nfft = params.get('nfft', 512)
-        self.time_window_ms = params.get('fft_time_window_ms', 10)
-        self.time_step_ms = params.get('fft_time_step_ms', 2)
-        self.process_chunk = params.get('process_chunk_s', 15) 
-        
     
     def set_active(self, idx):
         """Select a SongFile from the current list and designate one as the 
@@ -77,34 +68,35 @@ class AudioAnalyzer():
         the SongFile.  You must catch the returned value and save it, it is not
         written to self.Sxx by default
         """
-        noverlap = (self.time_window_ms - self.time_step_ms)* sf.Fs/1000
+        time_window_ms = self.params.get('fft_time_window_ms', 10)
+        time_step_ms = self.params.get('fft_time_step_ms', 2)
+        nfft = self.params.get('nfft', 512)
+        process_chunk = self.params.get('process_chunk_s', 15)
+        
+        noverlap = (time_window_ms - time_step_ms)* sf.Fs/1000
         noverlap = noverlap if noverlap > 0 else 0
         
-        if sf.data.shape[0] > self.process_chunk * sf.Fs:
-            split_count = int(np.ceil(sf.data.shape[0]/(self.process_chunk*sf.Fs)))
-            nchunk = self.process_chunk*sf.Fs
+        if sf.data.shape[0] > process_chunk * sf.Fs:
+            split_count = int(np.ceil(sf.data.shape[0]/(process_chunk*sf.Fs)))
+            nchunk = process_chunk*sf.Fs
         else:
             split_count = 1
             nchunk = sf.data.shape[0]
             
-        nperseg = self.time_window_ms * sf.Fs / 1000
+        nperseg = time_window_ms * sf.Fs / 1000
         
-        if self.nfft < nperseg:
+        if nfft < nperseg:
             nfft = 2**np.ceil(np.log2(nperseg))
             self.logger.warning('NFFT (%d) cannot be less than the number of '
                     'samples in each time_list window (%d).  Temporarily increasing '
                     'nfft to %d, which will require more memory.  To avoid this,'
                     ' decrease FFT Time Window in the parameters menu.', 
-                    self.nfft, nperseg, nfft)
-        else:
-            nfft = self.nfft
+                    nfft, nperseg, 2**np.ceil(np.log2(nperseg)))
          
-         
-        self.logger.info('test')
-        time.sleep(1) 
+
         for i in range(0, split_count):
             self.logger.info('Processing songfile from %d seconds to %d seconds', 
-                    i*self.process_chunk, (i+1)*self.process_chunk)
+                    i*process_chunk, (i+1)*process_chunk)
             
             (freq, time_part, Sxx_part) = signal.spectrogram(
                     sf.data[i*nchunk:(i+1)*nchunk], 
