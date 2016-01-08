@@ -163,6 +163,20 @@
          </widget>
         </item>
         <item>
+         <widget class="QCheckBox" name="entropy_checkbox">
+          <property name="text">
+           <string>Entropy</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="power_checkbox">
+          <property name="text">
+           <string>Power</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <spacer name="horizontalSpacer_3">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>

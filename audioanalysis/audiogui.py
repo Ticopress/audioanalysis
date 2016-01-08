@@ -72,6 +72,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Set up button callbacks
         self.open_file.clicked.connect(self.file_open_dialog)
         self.play_button.clicked.connect(self.click_play_button)
+        self.entropy_checkbox.clicked.connect(self.display_entropy, self.entropy_checkbox.isChecked())
+        self.power_checkbox.clicked.connect(self.display_power, self.power_checkbox.isChecked())
         
         #Set up SpectrogramNavBar signal callbacks
         self.last_gui_refresh_time = time.time()
@@ -85,7 +87,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 'display_threshold':-400, 
                        'split':600, 'vmin':-90, 'vmax':-20, 'nfft':512, 
-                       'fft_time_window_ms':10, 'fft_time_step_ms':1, 
+                       'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':15,
                        }
             
@@ -107,7 +109,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
               
         file_name = QtGui.QFileDialog.getOpenFileName(self, 'Open file', 
                 '/home', 'WAV files (*.wav)')
-        
         
         if file_name:
             self.logger.debug('Selected the file %s', str(file_name))
@@ -155,7 +156,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 channels=1,
                 rate=int(self.analyzer.active_song.Fs),
                 output=True,
-                stream_callback=self.play_audio_callback)
+                stream_callback=self.play_audio_callback,
+                frames_per_buffer=4096)
         
         self.stream.start_stream()
  
@@ -187,6 +189,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         self.display_classification()
         
+        self.display_entropy(show=self.entropy_checkbox.isChecked())
+        
+        self.display_power(show=self.power_checkbox.isChecked())
+        
         self.set_marker(0)
         self.set_selection(())
         
@@ -198,16 +204,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         NO display method affects the domain in any way.  That must be done
         external to the display method
-        """
-        try:
-            ax = self.toolbar.axis_dict['spectrogram']
-        except KeyError:
-            self.toolbar.add_axis('spectrogram') 
-            ax = self.toolbar.axis_dict['spectrogram']
-                      
+        """   
+                              
         t_step = self.params['time_downsample_disp']
         f_step = self.params['freq_downsample_disp']
-    
+        
         try:   
             time = self.analyzer.active_song.time[::t_step]
             freq = self.analyzer.active_song.freq[::f_step]
@@ -220,6 +221,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         except AttributeError:
             self.logger.error('No calculated spectrogram, cannot display')
             return
+          
+        try:
+            ax = self.toolbar.axis_dict['spectrogram']
+        except KeyError:
+            self.toolbar.add_axis('spectrogram') 
+            ax = self.toolbar.axis_dict['spectrogram']
         
         halfbin_time = (time[1] - time[0]) / 2.0
         halfbin_freq = (freq[1] - freq[0]) / 2.0
@@ -249,17 +256,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         external to the display method
         """
         try:
-            ax = self.toolbar.axis_dict['classification']
-        except KeyError:
-            self.toolbar.add_axis('classification')
-            ax = self.toolbar.axis_dict['classification']
-            
-        try:
             classes = self.analyzer.active_song.classification
             time = self.analyzer.active_song.time
         except AttributeError:
             self.logger.error('No active song to display')
             return
+        
+        try:
+            ax = self.toolbar.axis_dict['classification']
+        except KeyError:
+            self.toolbar.add_axis('classification')
+            ax = self.toolbar.axis_dict['classification']
         
         if ax.lines:
             ax.lines.remove(ax.lines[0])
@@ -269,6 +276,58 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.toolbar.set_range('classification', (0, max(classes)+1))
 
         self.canvas.draw_idle()
+        
+    def display_entropy(self, show=True):
+        try:
+            entropy = self.analyzer.active_song.entropy
+            time = self.analyzer.active_song.time
+        except AttributeError:
+            self.logger.warning('No active song to display')
+            return
+         
+        try:
+            ax = self.toolbar.axis_dict['entropy']
+        except KeyError:
+            self.toolbar.add_axis('entropy')
+            ax = self.toolbar.axis_dict['entropy']
+             
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        l, = ax.plot(time, entropy, 'g-')
+           
+        self.toolbar.set_range('entropy', (min(entropy), max(entropy)))
+
+        l.set_visible(show)
+
+        self.canvas.draw_idle()
+    
+    def display_power(self, show=True):
+        try:
+            ax = self.toolbar.axis_dict['power']
+        except KeyError:
+            self.toolbar.add_axis('power')
+            ax = self.toolbar.axis_dict['power']
+
+        try:
+            power = self.analyzer.active_song.power
+            time = self.analyzer.active_song.time
+        except AttributeError:
+            self.logger.error('No active song to display')
+            return
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        l, = ax.plot(time, power, 'r-')
+
+        self.toolbar.set_range('power', (min(power), max(power)))
+        
+        l.set_visible(show)
+        
+        self.canvas.draw_idle()
+
         
     def keyPressEvent(self, e):
         """Listens for a keypress
@@ -439,7 +498,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
             self.axis_names.append(name)
                 
-        if name in ['marker', 'classification']:
+        if name in ['marker', 'classification', 'power', 'entropy']:
             self.axis_dict[name].yaxis.set_visible(False)
      
     def set_domain(self, x_domain):
@@ -467,7 +526,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         try:
             ax = self.axis_dict[name]
         except KeyError:
-            self.logger.warning('No such axis to set the range')
+            self.logger.warning('No such axis %s to set the range', name)
             return
         
         self.logger.debug('Setting the range of %s to %s', name, str(y_range))

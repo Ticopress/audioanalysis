@@ -125,20 +125,26 @@ class AudioAnalyzer():
                 time_list = np.append(time_list, time_list[-1]+time_part)
                 Sxx = np.hstack((Sxx, Sxx_part))
            
-        
-        Sxx = 10*np.log10(Sxx)
         self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(Sxx))
-        self.logger.debug('STFT dimensions %s', str(Sxx.shape))
-                        
-        sf.entropy = np.zeros(time_list.size)
-        sf.amplitude = np.zeros(time_list.size)
+        self.logger.debug('STFT dimensions %s', str(Sxx.shape))               
+
         sf.classification = np.zeros(time_list.size)
         sf.time = time_list
         sf.freq = freq
+        sf.entropy = self.calc_entropy(Sxx)
+        sf.power = self.calc_power(Sxx)
         
-        
-        
-        return Sxx
+        return 10*np.log10(Sxx)
+    
+    def calc_entropy(self, Sxx):
+        """Calculates the Wiener entropy (0 to 1) for each time slice of Sxx"""
+        n = Sxx.shape[0]
+        return np.exp(np.sum(np.log(Sxx),0)/n) / (np.sum(Sxx, 0)/n)
+    
+    @staticmethod
+    def calc_power(Sxx):
+        """Calculates average signal power"""
+        return np.sum(Sxx, 0) / Sxx.shape[0]
  
     @staticmethod
     def class_integer_to_vectorized(int_classification):
@@ -296,6 +302,8 @@ class SongFile:
         self.time = []
         self.freq = []
         self.classification = []
+        self.entropy = []
+        self.power = []
         
         
         #Values set manually or by the load classmethod
