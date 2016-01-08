@@ -35,13 +35,10 @@ class AudioAnalyzer():
     """
 
     
-    def __init__(self, **params):
+    def __init__(self):
         """Constructor docstrings goes here TODO
         """
         self.logger = logging.getLogger('AudioAnalyzer.logger')
-        
-        #Set spectrogram and neural net parameters
-        self.params = params
         
         #List of loaded songs
         self.songs = []
@@ -52,10 +49,10 @@ class AudioAnalyzer():
         #Reference to the neural net used for processing
         self.nn = None
     
-    def build_neural_net(self):
+    def build_neural_net(self, **params):
         nn = Sequential()
         
-        layers = self.params.get('layers')
+        layers = params.get('layers')
         
         for i, layerspec in enumerate(layers):
             if i==0: #size the input layer correctly
@@ -113,7 +110,7 @@ class AudioAnalyzer():
         else:
             self.Sxx = self.process(self.active_song)
     
-    def process(self, sf):
+    def process(self, sf, **params):
         """Take a songfile and using its data, create the processed statistics
         
         This method both updates the data stored in the SongFile (for those
@@ -121,10 +118,10 @@ class AudioAnalyzer():
         the SongFile.  You must catch the returned value and save it, it is not
         written to self.Sxx by default
         """
-        time_window_ms = self.params.get('fft_time_window_ms', 10)
-        time_step_ms = self.params.get('fft_time_step_ms', 2)
-        nfft = self.params.get('nfft', 512)
-        process_chunk = self.params.get('process_chunk_s', 15)
+        time_window_ms = params.get('fft_time_window_ms', 10)
+        time_step_ms = params.get('fft_time_step_ms', 2)
+        nfft = params.get('nfft', 512)
+        process_chunk = params.get('process_chunk_s', 15)
         
         noverlap = (time_window_ms - time_step_ms)* sf.Fs/1000
         noverlap = noverlap if noverlap > 0 else 0
