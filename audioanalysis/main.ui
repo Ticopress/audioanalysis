@@ -144,15 +144,18 @@
          </widget>
         </item>
         <item>
-         <widget class="QTimeEdit" name="timeEdit">
+         <widget class="QTimeEdit" name="time_edit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
           <property name="buttonSymbols">
            <enum>QAbstractSpinBox::UpDownArrows</enum>
           </property>
           <property name="currentSection">
-           <enum>QDateTimeEdit::HourSection</enum>
+           <enum>QDateTimeEdit::MinuteSection</enum>
           </property>
           <property name="displayFormat">
-           <string>hh:mm:ss.sss</string>
+           <string>mm:ss.zzz</string>
           </property>
           <property name="timeSpec">
            <enum>Qt::OffsetFromUTC</enum>

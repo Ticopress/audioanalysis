@@ -27,12 +27,11 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT)
-from matplotlib.backends.qt_compat import QtWidgets
 from matplotlib.backend_bases import cursors
 
 from PyQt4 import QtGui, QtCore
 
-import logging, sys, os
+import logging, sys, os, pyaudio, time
 import numpy as np
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
@@ -57,10 +56,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
-        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        sys.stdout = OutLog(self.console, sys.stdout)
+        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
         # Initialize the basic plot area
         self.fig = Figure()
@@ -75,6 +74,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.play_button.clicked.connect(self.click_play_button)
         
         #Set up SpectrogramNavBar signal callbacks
+        self.last_gui_refresh_time = time.time()
         self.marker = 0
         self.current_selection = ()
         self.connect(self.toolbar, QtCore.SIGNAL("set_marker"), self.set_marker)
@@ -85,11 +85,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 'display_threshold':-400, 
                        'split':600, 'vmin':-90, 'vmax':-20, 'nfft':512, 
-                       'fft_time_window_ms':10, 'fft_time_step_ms':2, 
+                       'fft_time_window_ms':10, 'fft_time_step_ms':1, 
                        'process_chunk_s':15,
                        }
             
         self.analyzer = AudioAnalyzer(**self.params)
+        self.player = pyaudio.PyAudio()
         
         self.canvas.draw_idle()
         self.show()
@@ -100,6 +101,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         """Provide a standard file open dialog to import .wav data into the 
         model classes"""  
         self.logger.debug('Clicked the file select button')
+        
+        if self.play_button.isChecked():
+            self.play_button.click()
               
         file_name = QtGui.QFileDialog.getOpenFileName(self, 'Open file', 
                 '/home', 'WAV files (*.wav)')
@@ -129,13 +133,49 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.debug('Cancelled file select')
     
     def click_play_button(self):
-        if self.play_button.isChecked():
-            self.logger.debug('Playback started')
-            self.analyzer.start_playback(self.toolbar.marker)
-        else:
-            self.logger.debug('Ending playback')  
-            self.analyzer.stop_playback()
+        try:
+            if self.play_button.isChecked():
+                self.start_playback()
+                self.logger.debug('Playback started')
+            else:
+                self.logger.debug('Ending playback')  
+                self.stop_playback()    
+        except AttributeError:
+            self.logger.error('Could not execute playback, no song prepared')
+            self.play_button.setChecked(not self.play_button.isChecked())
+              
         
+    def start_playback(self):
+        """Open and start a PyAudio stream
+        
+        Raises AttributeError if self.analyzer.active_song is not set
+        """
+        self.stream = self.player.open(
+                format=pyaudio.paFloat32,
+                channels=1,
+                rate=int(self.analyzer.active_song.Fs),
+                output=True,
+                stream_callback=self.play_audio_callback)
+        
+        self.stream.start_stream()
+ 
+    
+    def stop_playback(self):
+        """Stop and close a PyAudio stream
+        
+        Raises AttributeError if self.stream is not set
+        """
+        if self.stream.is_active():
+            self.stream.stop_stream()
+            self.stream.close()
+
+    def play_audio_callback(self, in_data, frame_count, time_info, status):
+        index = int(self.marker * self.analyzer.active_song.Fs)
+        data = self.analyzer.active_song.data[index:index+frame_count]
+        
+        self.set_marker((index+frame_count)/self.analyzer.active_song.Fs)
+        
+        return (data, pyaudio.paContinue)    
     
     def show_data(self):
         """Put all applicable data from the Model to the View
@@ -260,24 +300,41 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Selection set to %s', str(self.current_selection))
     
     def set_marker(self, marker):
-        try:
-            ax = self.toolbar.axis_dict['marker']
-        except KeyError:
-            self.toolbar.add_axis('marker')
-            ax = self.toolbar.axis_dict['marker']
-        
+        """Sets the marker, but does not update the GUI unless the change in
+        values from the last GUI value is significant"""
         self.marker = marker
         
-        if ax.lines:
-            ax.lines.remove(ax.lines[0])
+        if time.time() - self.last_gui_refresh_time > 0.05:
+            try:
+                ax = self.toolbar.axis_dict['marker']
+            except KeyError:
+                self.toolbar.add_axis('marker')
+                ax = self.toolbar.axis_dict['marker']
             
-        ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
-        self.toolbar.set_range('marker', (0,1))
-        self.canvas.draw_idle()
+            if ax.lines:
+                ax.lines.remove(ax.lines[0])
+            
+            ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
+            self.toolbar.set_range('marker', (0,1))
+            self.canvas.draw_idle()
+            
+            new_time = QtCore.QTime(0, self.marker/60, second=self.marker%60, msec=(self.marker%1)*1000)
+            
+            self.time_edit.setTime(new_time)
+            
+            self.last_gui_refresh_time = time.time()
         
-        self.logger.debug('Playback marker set to %0.4f', self.marker)
 
+        if (self.marker > self.analyzer.active_song.domain[1]-0.1 and 
+                self.play_button.isChecked()):
+            self.logger.info('Ending playback at end of file')
+            self.play_button.click()
         
+        #self.logger.debug('Playback marker set to %0.4f', self.marker)
+
+    def set_marker_visual(self):
+        """Sets the marker position in the GUI"""
+
         
 class SpectrogramNavBar(NavigationToolbar2QT):
     """Provides a navigation bar specially configured for spectrogram interaction
@@ -359,7 +416,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
          
         self.addSeparator() 
          
-        self.locLabel = QtWidgets.QLabel("", self)
+        self.locLabel = QtGui.QLabel("", self)
         labelAction = self.addWidget(self.locLabel)
         labelAction.setVisible(True) 
         self.coordinates = True
@@ -437,7 +494,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self.logger.debug('Clicked the forward button')
         
-        self.emit(QtCore.SIGNAL('set_selection', ()))
+        self.emit(QtCore.SIGNAL('set_selection'), ())
         
         try:
             ax = self.axis_dict[self.axis_names[0]]
@@ -464,7 +521,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.logger.debug('Clicked the back button')
         
 
-        self.emit(QtCore.SIGNAL('set_selection', ()))
+        self.emit(QtCore.SIGNAL('set_selection'), ())
         
         try:
             ax = self.axis_dict[self.axis_names[0]]
@@ -515,11 +572,11 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.dynamic_update()
 
     def pan(self, *args):
-        self.emit(QtCore.SIGNAL('set_selection', ()))
+        self.emit(QtCore.SIGNAL('set_selection'), ())
         super(SpectrogramNavBar, self).pan(*args)
         
     def zoom(self, *args):
-        self.emit(QtCore.SIGNAL('set_selection', ()))
+        self.emit(QtCore.SIGNAL('set_selection'), ())
         super(SpectrogramNavBar, self).zoom(*args)
         
     def release_zoom(self, event):

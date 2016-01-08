@@ -21,7 +21,7 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 """
 
 from scipy import signal
-from scikits.audiolab import Sndfile
+from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
 import numpy as np
 import logging, sys, time
 
@@ -68,17 +68,6 @@ class AudioAnalyzer():
             self.logger.error('There are not %d loaded songs, cannot set active', idx)
         else:
             self.Sxx = self.process(self.active_song)
-        
-        
-    def start_playback(self, time):
-        pass
-    
-    def stop_playback(self):
-        pass
-        
-        
-    def play_audio_callback(self, in_data, frame_count, time_info, status):
-        pass
     
     def process(self, sf):
         """Take a songfile and using its data, create the processed statistics
@@ -103,16 +92,20 @@ class AudioAnalyzer():
         if self.nfft < nperseg:
             nfft = 2**np.ceil(np.log2(nperseg))
             self.logger.warning('NFFT (%d) cannot be less than the number of '
-                    'samples in each time window (%d).  Temporarily increasing '
+                    'samples in each time_list window (%d).  Temporarily increasing '
                     'nfft to %d, which will require more memory.  To avoid this,'
                     ' decrease FFT Time Window in the parameters menu.', 
                     self.nfft, nperseg, nfft)
         else:
             nfft = self.nfft
          
+         
+        self.logger.info('test')
+        time.sleep(1) 
         for i in range(0, split_count):
             self.logger.info('Processing songfile from %d seconds to %d seconds', 
                     i*self.process_chunk, (i+1)*self.process_chunk)
+            
             (freq, time_part, Sxx_part) = signal.spectrogram(
                     sf.data[i*nchunk:(i+1)*nchunk], 
                     fs=sf.Fs,
@@ -124,11 +117,12 @@ class AudioAnalyzer():
                     scaling='density', 
                     window=('hamming'), 
                     )
+            
             if i == 0:
-                time = time_part
+                time_list = time_part
                 Sxx = Sxx_part
             else:
-                time = np.append(time, time[-1]+time_part)
+                time_list = np.append(time_list, time_list[-1]+time_part)
                 Sxx = np.hstack((Sxx, Sxx_part))
            
         
@@ -136,11 +130,13 @@ class AudioAnalyzer():
         self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(Sxx))
         self.logger.debug('STFT dimensions %s', str(Sxx.shape))
                         
-        sf.entropy = np.zeros(time.size)
-        sf.amplitude = np.zeros(time.size)
-        sf.classification = np.zeros(time.size)
-        sf.time = time
+        sf.entropy = np.zeros(time_list.size)
+        sf.amplitude = np.zeros(time_list.size)
+        sf.classification = np.zeros(time_list.size)
+        sf.time = time_list
         sf.freq = freq
+        
+        
         
         return Sxx
  
@@ -335,10 +331,10 @@ class SongFile:
         
         Returns an array of SongFiles"""
         
-        f = Sndfile(filename, mode='r')
-        data = f.read_frames(f.nframes)
+        f = SoundFile(filename, mode='r')
+        data = f.read_frames(f.nframes, dtype=np.float32)
         fs = float(f.samplerate)
-        
+                
         if data.ndim is not 1:
             data = data[:, 0]
         
@@ -352,13 +348,14 @@ class SongFile:
         else:
             nperfile = data.shape[0]
             split_count = 1
-            if nperfile / fs > 300:
-                logging.getLogger('SongFile.Loading.logger').warning(
-                        'Current song is %d seconds long and is not'
-                        ' split.  This may cause substantial memory use and '
-                        'lead to a program crash.  It is recommended to either '
-                        'enable splitting or use a shorter file for NN training'
-                        , nperfile/fs)
+            
+        if nperfile / fs > 300:
+            logging.getLogger('SongFile.Loading.logger').warning(
+                    'Current song is %d seconds long and is not'
+                    ' split.  This may cause substantial memory use and '
+                    'lead to a program crash.  It is recommended to either '
+                    'enable splitting or use a shorter file for NN training'
+                    , nperfile/fs)
             
         sfs = []
         
@@ -368,7 +365,6 @@ class SongFile:
             next_sf.fname = filename
             next_sf.start = int(i*nperfile/fs)
             next_sf.end = int((i+1)*nperfile/fs)
-            
             
             sfs.append(next_sf)
             
