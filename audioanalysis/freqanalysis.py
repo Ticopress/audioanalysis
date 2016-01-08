@@ -35,7 +35,7 @@ class AudioAnalyzer():
     """
 
     
-    def __init__(self):
+    def __init__(self, **params):
         """Constructor docstrings goes here TODO
         """
         self.logger = logging.getLogger('AudioAnalyzer.logger')
@@ -46,14 +46,16 @@ class AudioAnalyzer():
         self.active_song = None
         self.Sxx = None
         
+        self.params = params
+        
         #Reference to the neural net used for processing
         self.nn = None
     
     def build_neural_net(self, **params):
         nn = Sequential()
         
-        layers = params.get('layers')
-        
+        layers = params.get('layers', [])
+                
         for i, layerspec in enumerate(layers):
             if i==0: #size the input layer correctly
                 try:
@@ -61,9 +63,11 @@ class AudioAnalyzer():
                 except (AttributeError, TypeError):
                     self.logger.error('No active song set, cannot build neural net')
                     return
-            self.logger.info('Building layer specified by %s', str(layerspec))
             l = self.make_layer(layerspec)
             nn.add(l)
+            
+            self.logger.debug('Layer input: %s', str(l.input_shape))
+            self.logger.debug('Layer output: %s', str(l.output_shape))
             
         self.logger.info('Building the output layer for %d classes', self.active_song.num_classes)
         l = self.make_layer({'type':'Dense', 'args':(self.active_song.num_classes,)})   
@@ -81,7 +85,8 @@ class AudioAnalyzer():
             
     def make_layer(self, layerspec):
         name = layerspec.get('type')
-        
+        self.logger.info('Building layer specified by %s', str(layerspec))
+
         try:
             cls = getattr(corelayers, name)
         except AttributeError:
@@ -91,24 +96,30 @@ class AudioAnalyzer():
                 self.logger.error('Unreadable layerspec provided, cannot build neural net')
                 raise e
             
-        args = layerspec.get('args')
-        kwargs = layerspec.get('kwargs')
+        args = layerspec.get('args', ())
+        kwargs = layerspec.get('kwargs', {})
         
         l = cls(*args, **kwargs)
         
         return l
     
-    def set_active(self, idx):
+    def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
         active SongFile
         """
+            
+        try:
+            idx = self.songs.index(sf)
+        except IndexError:
+            idx = len(self.songs)
+            self.songs.append(sf)
+        
+        self.active_song = self.songs[idx]
         
         try:
-            self.active_song = self.songs[idx]
-        except IndexError:
-            self.logger.error('There are not %d loaded songs, cannot set active', idx)
-        else:
-            self.Sxx = self.process(self.active_song)
+            self.Sxx = self.active_song.Sxx
+        except AttributeError:
+            self.Sxx = self.process(self.active_song, **self.params)
     
     def process(self, sf, **params):
         """Take a songfile and using its data, create the processed statistics

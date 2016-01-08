@@ -36,22 +36,22 @@ def main():
     # convolution kernel size
     nb_conv = 3
     
-    # the data, shuffled and split between tran and test sets
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    
-    X_train = X_train.reshape(X_train.shape[0], 1, img_rows, img_cols)
-    X_test = X_test.reshape(X_test.shape[0], 1, img_rows, img_cols)
-    X_train = X_train.astype("float32")
-    X_test = X_test.astype("float32")
-    X_train /= 255
-    X_test /= 255
-    print('X_train shape:', X_train.shape)
-    print(X_train.shape[0], 'train samples')
-    print(X_test.shape[0], 'test samples')
-    
-    # convert class vectors to binary class matrices
-    Y_train = np_utils.to_categorical(y_train, nb_classes)
-    Y_test = np_utils.to_categorical(y_test, nb_classes)
+#     # the data, shuffled and split between tran and test sets
+#     (X_train, y_train), (X_test, y_test) = mnist.load_data()
+#     
+#     X_train = X_train.reshape(X_train.shape[0], 1, img_rows, img_cols)
+#     X_test = X_test.reshape(X_test.shape[0], 1, img_rows, img_cols)
+#     X_train = X_train.astype("float32")
+#     X_test = X_test.astype("float32")
+#     X_train /= 255
+#     X_test /= 255
+#     print('X_train shape:', X_train.shape)
+#     print(X_train.shape[0], 'train samples')
+#     print(X_test.shape[0], 'test samples')
+#     
+#     # convert class vectors to binary class matrices
+#     Y_train = np_utils.to_categorical(y_train, nb_classes)
+#     Y_test = np_utils.to_categorical(y_test, nb_classes)
     
     model = Sequential()
     
@@ -71,12 +71,16 @@ def main():
     model.add(Dense(nb_classes))
     model.add(Activation('softmax'))
     
+    
+    print("Compiling!")
+    
     model.compile(loss='categorical_crossentropy', optimizer='adadelta')
     
-    model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epoch, show_accuracy=True, verbose=1, validation_data=(X_test, Y_test))
-    score = model.evaluate(X_test, Y_test, show_accuracy=True, verbose=0)
-    print('Test score:', score[0])
-    print('Test accuracy:', score[1])
+    print("Fitting!")
+    #model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epoch, show_accuracy=True, verbose=1, validation_data=(X_test, Y_test))
+    #score = model.evaluate(X_test, Y_test, show_accuracy=True, verbose=0)
+    #print('Test score:', score[0])
+    #print('Test accuracy:', score[1])
     
 if __name__ == '__main__':
     main()

@@ -56,8 +56,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        sys.stdout = OutLog(self.console, sys.stdout)
-        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        #sys.stdout = OutLog(self.console, sys.stdout)
+        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
@@ -74,6 +74,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.play_button.clicked.connect(self.click_play_button)
         self.entropy_checkbox.clicked.connect(self.display_entropy, self.entropy_checkbox.isChecked())
         self.power_checkbox.clicked.connect(self.display_power, self.power_checkbox.isChecked())
+        self.confirm.clicked.connect(self.click_confirm_button)
         
         #Set up SpectrogramNavBar signal callbacks
         self.last_gui_refresh_time = time.time()
@@ -84,11 +85,26 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
+        defaultlayers = [
+                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Activation', 'args':('relu',)},
+                {'type':'Convolution2D', 'args':(16,3,1,)},
+                {'type':'Activation', 'args':('relu',)},
+                {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
+                {'type':'Dropout', 'args':(0.25,)},
+                {'type':'Flatten'},
+                {'type':'Dense', 'args':(128,)},
+                {'type':'Activation', 'args':('relu',)},
+                {'type':'Dropout', 'args':(0.5,)},
+                ]
+        
+        
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 'display_threshold':-400, 
                        'split':600, 'vmin':-90, 'vmax':-20, 'nfft':512, 
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
-                       'process_chunk_s':15,
+                       'process_chunk_s':15, 'layers':defaultlayers, 
+                       'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        }
             
         self.analyzer = AudioAnalyzer(**self.params)
@@ -115,7 +131,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
             self.file_name.setText(file_name)
             
-            newest_sf = len(self.analyzer.songs)
             new_songs = SongFile.load(
                             str(file_name),
                             downsampling=self.params['load_downsampling']
@@ -126,7 +141,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
             self.analyzer.songs.extend(new_songs)
             
-            self.analyzer.set_active(newest_sf)
+            self.analyzer.set_active(new_songs[0])
             
             self.show_data()
 
@@ -179,6 +194,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return (data, pyaudio.paContinue)    
     
+    def click_confirm_button(self):
+        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
+        self.logger.info('Neural network generated')
     def show_data(self):
         """Put all applicable data from the Model to the View
         
