@@ -62,20 +62,20 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
         # Initialize the basic plot area
-        self.fig = Figure()
-        self.canvas = FigureCanvas(self.fig)
-        self.plot_vl.addWidget(self.canvas)
         
-        self.toolbar = SpectrogramNavBar(self.canvas, self)
-        self.plot_vl.addWidget(self.toolbar)
+        canvas = SpectrogramCanvas(Figure())
+        toolbar = SpectrogramNavBar(canvas, self)
+
+        self.set_canvas(canvas, self.plot_vl)
         
         #Set up button callbacks
         self.open_file.clicked.connect(self.file_open_dialog)
         self.play_button.clicked.connect(self.click_play_button)
         self.entropy_checkbox.clicked.connect(self.display_entropy, self.entropy_checkbox.isChecked())
         self.power_checkbox.clicked.connect(self.display_power, self.power_checkbox.isChecked())
-        self.confirm.clicked.connect(self.click_confirm_button)
         
+        
+        self.table.setHorizontalHeaderLabels(['H1', 'H2', 'H3'])
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
@@ -108,6 +108,24 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.logger.info('Finished with initialization')
     
+    
+    def set_canvas(self, canvas, loc):
+        """Set the canvas for this GUI
+        
+        Assigns the given canvas to be this GUI's canvas, connects any
+        relevant slots, and places the canvas and its tools into the loc 
+        container
+        """
+        loc.addWidget(canvas)
+        
+        for t in canvas.tools.values():
+            loc.addWidget(t)
+            
+        self.canvas = canvas
+        
+        #Connect any slots coming from canvas here
+        #-----slots-----
+    
     def file_open_dialog(self):
         """Provide a standard file open dialog to import .wav data into the 
         model classes"""  
@@ -116,30 +134,27 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         if self.play_button.isChecked():
             self.play_button.click()
               
-        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Open file', 
+        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', 
                 '/home', 'WAV files (*.wav)')
         
-        if file_name:
-            self.logger.debug('Selected the file %s', str(file_name))
-
-            self.file_name.setText(file_name)
+        for f in file_names:
+            self.logger.debug('Selected the file %s', str(f))
             
             new_songs = SongFile.load(
-                            str(file_name),
+                            str(f),
                             downsampling=self.params['load_downsampling']
                             )
             
-            self.logger.info('Loaded %s as %d SongFiles', str(file_name), 
+            self.logger.info('Loaded %s as %d SongFiles', str(f), 
                     len(new_songs))
             
             self.analyzer.songs.extend(new_songs)
-            
-            self.analyzer.set_active(new_songs[0])
-            
-            self.show_data()
-
+            self.update_table()
         else:
             self.logger.debug('Cancelled file select')
+    
+    def update_table(self):
+        pass
     
     def click_play_button(self):
         try:
@@ -380,7 +395,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         self.logger = logging.getLogger('SpectrogramCanvas.logger')
         
         FigureCanvas.__init__(self, figure_)
-        QtCore.QObject.__init()
+        QtCore.QObject.__init__(self)
         
         #A single, unified set of x-boundaries, never violable
         self.x_constraint = ()
@@ -388,6 +403,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         self.axis_dict = {}
         #Ordered list of axis names, in order added
         self.axis_names = []
+        
+        self.tools = {}
         
         self.image = None
         
@@ -479,9 +496,10 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
                     'axes available', len(self.axis_names)+1)
             return
     
-    def set_selection(self, sel):
+    def set_selection(self, sel=()):
         if not sel:
             self.current_selection = ()
+            self.drawRectangle(None)
         else:
             self.current_selection = sel
             
@@ -494,8 +512,9 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         Might later emit a signal of some sort
         """
         self.marker = marker
+        t = time.time()
         
-        if time.time() - self.last_gui_refresh_time > 0.05:
+        if t - self.last_gui_refresh_time > 0.05:
             try:
                 ax = self.axis_dict['marker']
             except KeyError:
@@ -508,6 +527,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
             self.set_range('marker', (0,1))
             self.draw_idle()
+            self.last_gui_refresh_time = t
             
             
          
@@ -586,7 +606,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self._idSelect = None
         
         try:
-            self.canvas_.add_tool(self)
+            canvas_.add_tool(self)
         except AttributeError as e:
             self.logger.error('Cannot initialize SpectrogramNavBar - canvas '
                     'type not valid')

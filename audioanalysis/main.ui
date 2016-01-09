@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>759</width>
-    <height>638</height>
+    <width>686</width>
+    <height>459</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -22,96 +22,60 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <widget class="QTabWidget" name="stack">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="tabShape">
-       <enum>QTabWidget::Rounded</enum>
-      </property>
-      <property name="currentIndex">
-       <number>1</number>
-      </property>
-      <widget class="QWidget" name="stackPage1">
-       <property name="accessibleName">
-        <string/>
-       </property>
-       <attribute name="title">
-        <string>Neural Net Training</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="layout">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_3">
         <item>
-         <layout class="QHBoxLayout" name="horizontalLayout">
-          <item>
-           <widget class="QPushButton" name="open_file">
-            <property name="minimumSize">
-             <size>
-              <width>155</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Open Audio File</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/wave.png</normaloff>icons/wave.png</iconset>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="file_name">
-            <property name="text">
-             <string/>
-            </property>
-            <property name="dragEnabled">
-             <bool>true</bool>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="placeholderText">
-             <string comment="file name here" extracomment="file name here"/>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <spacer name="horizontalSpacer_7">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="sizeType">
-             <enum>QSizePolicy::Minimum</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>10</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-         </layout>
+         <widget class="QPushButton" name="open_file">
+          <property name="minimumSize">
+           <size>
+            <width>155</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Load File/Folder</string>
+          </property>
+          <property name="icon">
+           <iconset>
+            <normaloff>icons/wave.png</normaloff>icons/wave.png</iconset>
+          </property>
+         </widget>
         </item>
         <item>
-         <widget class="QWidget" name="plot_container" native="true">
+         <widget class="QTableWidget" name="table">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+           <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>200</height>
-           </size>
-          </property>
-          <layout class="QVBoxLayout" name="plot_vl"/>
          </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_4">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout">
+          <item>
+           <widget class="QWidget" name="plot_container" native="true">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>200</height>
+             </size>
+            </property>
+            <layout class="QVBoxLayout" name="plot_vl"/>
+           </widget>
+          </item>
+         </layout>
         </item>
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_7">
@@ -164,6 +128,19 @@
            </widget>
           </item>
           <item>
+           <spacer name="horizontalSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
            <widget class="QCheckBox" name="entropy_checkbox">
             <property name="text">
              <string>Entropy</string>
@@ -177,75 +154,11 @@
             </property>
            </widget>
           </item>
-          <item>
-           <spacer name="horizontalSpacer_8">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>40</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-          <item>
-           <widget class="QPushButton" name="confirm">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="text">
-             <string>Confirm Classes</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/ok.png</normaloff>icons/ok.png</iconset>
-            </property>
-            <property name="iconSize">
-             <size>
-              <width>24</width>
-              <height>24</height>
-             </size>
-            </property>
-           </widget>
-          </item>
          </layout>
         </item>
        </layout>
-      </widget>
-      <widget class="QWidget" name="stackPage2">
-       <attribute name="title">
-        <string>Classification</string>
-       </attribute>
-       <widget class="QWidget" name="plot_container_2" native="true">
-        <property name="geometry">
-         <rect>
-          <x>150</x>
-          <y>40</y>
-          <width>441</width>
-          <height>221</height>
-         </rect>
-        </property>
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>200</height>
-         </size>
-        </property>
-        <layout class="QVBoxLayout" name="plot_vl_2"/>
-       </widget>
-      </widget>
-     </widget>
+      </item>
+     </layout>
     </item>
     <item>
      <widget class="QTextEdit" name="console">
@@ -258,7 +171,7 @@
       <property name="minimumSize">
        <size>
         <width>0</width>
-        <height>75</height>
+        <height>100</height>
        </size>
       </property>
       <property name="frameShadow">
@@ -276,15 +189,45 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>759</width>
+     <width>686</width>
      <height>22</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuNeural_Net">
+    <property name="title">
+     <string>Neural Net</string>
+    </property>
+    <addaction name="actioncreate"/>
+    <addaction name="actionload"/>
+    <addaction name="actiondump"/>
+    <addaction name="actionclassify"/>
+   </widget>
+   <addaction name="menuNeural_Net"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionMotif_Selection">
    <property name="text">
     <string>Motif Selection</string>
+   </property>
+  </action>
+  <action name="actioncreate">
+   <property name="text">
+    <string>Create From Song</string>
+   </property>
+  </action>
+  <action name="actionload">
+   <property name="text">
+    <string>Load From File</string>
+   </property>
+  </action>
+  <action name="actiondump">
+   <property name="text">
+    <string>Dump To File</string>
+   </property>
+  </action>
+  <action name="actionclassify">
+   <property name="text">
+    <string>Classify All Songs</string>
    </property>
   </action>
  </widget>
