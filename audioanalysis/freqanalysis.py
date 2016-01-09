@@ -28,6 +28,10 @@ import logging, sys, time
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
 from keras.models import Sequential
+from __builtin__ import file
+from sympy.mpmath import limit
+from sqlite3.dbapi2 import Time
+from compiler.ast import Power
 
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
@@ -42,6 +46,7 @@ class AudioAnalyzer():
         
         #List of loaded songs
         self.songs = []
+        self.motifs = []
         #Reference to and spectrogram of currently active song
         self.active_song = None
         self.Sxx = None
@@ -62,7 +67,7 @@ class AudioAnalyzer():
                     layerspec['kwargs']['input_shape'] = (1, len(self.active_song.freq), 1)
                 except (AttributeError, TypeError):
                     self.logger.error('No active song set, cannot build neural net')
-                    return
+                    return None
             l = self.make_layer(layerspec)
             nn.add(l)
             
@@ -80,7 +85,7 @@ class AudioAnalyzer():
         optimizer = self.params.get('optimizer', 'sgd')
         
         nn.compile(loss=loss, optimizer=optimizer)
-        
+        self.logger.info('Successfully constructed a new neural net')
         return nn
             
     def make_layer(self, layerspec):
@@ -344,7 +349,7 @@ class SongFile:
 
     Instead, this stores the basic song data: Fs, analog signal data"""
     
-    def __init__(self, data, Fs):
+    def __init__(self, name, data, Fs):
         self.logger = logging.getLogger('SongFile.logger')
         
         #Values passed into the init
@@ -359,10 +364,11 @@ class SongFile:
         self.power = None
         
         
-        #Values set manually or by the load classmethod
-        self.fname = None
-        self.start = None
-        self.end = None
+        self.name = name
+        
+        
+        self.start = 0
+        self.end = len(data)/Fs
      
     @property
     def domain(self):
@@ -418,9 +424,9 @@ class SongFile:
         sfs = []
         
         for i in range(0, split_count):
-            next_sf = cls(data[i*nperfile:(i+1)*nperfile], fs)
+            next_sf = cls(filename, data[i*nperfile:(i+1)*nperfile], fs)
             
-            next_sf.fname = filename
+            #override the start/end markers - made from a split file            
             next_sf.start = int(i*nperfile/fs)
             next_sf.end = int((i+1)*nperfile/fs)
             
@@ -429,13 +435,46 @@ class SongFile:
         return sfs
     
     def __str__(self):
-        return '%s.%04d_%04d'.format(self.fname, self.start, self.end)
+        return '%s.%04d_%04d'.format(self.name, self.start, self.end)
     
     def __repr__(self):
         return str(self)
-    
+
     def export(self):
+        """Exports data in WAV format
+        
+        Not useful for SongFiles you just loaded, but possible quite useful for
+        generated SongFiles, or for subclasses of SongFile, like for SongMotifs
+        """
         pass
     
-    def load_export(self):
-        pass
+    
+class SongMotif(SongFile):
+    """A special class for storing a short motif
+    
+    This class differs from a SongFile only in that:
+        1) it cannot be loaded from a file.  Instead, it is initialized with 
+            all of its data (class, entropy, power, even Sxx spectrogram)
+        2) they must be shorter than 5 seconds
+        3) they retain their spectrogram - hence the length limit
+        
+    Basically, this is a convenience class for data storage, not much else
+    """
+    
+    def __init__(self, name, data, Fs, time, classes, entropy, power, Sxx):
+        """creates a new SongMotif from all of the motif's data"""  
+        self.name = name
+        
+        self.data = data
+        self.Fs = Fs
+        
+        self.time = time
+        self.classification = classes
+        
+        self.entropy = entropy
+        self.power = power
+        
+        self.Sxx = Sxx
+        
+        self.start = min(time)
+        self.end = max(time)
