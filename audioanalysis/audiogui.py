@@ -407,10 +407,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.info('Ending playback at end of file')
             self.play_button.click()
         
-        #self.logger.debug('Playback marker set to %0.4f', self.marker)
-
-    def set_marker_visual(self):
-        """Sets the marker position in the GUI"""
 
         
 class SpectrogramNavBar(NavigationToolbar2QT):
