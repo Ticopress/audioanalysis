@@ -66,7 +66,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.canvas = FigureCanvas(self.fig)
         self.plot_vl.addWidget(self.canvas)
         
-        self.toolbar = SpectrogramNavBar(self.canvas, self.plot_container)
+        self.toolbar = SpectrogramNavBar(self.canvas, self)
         self.plot_vl.addWidget(self.toolbar)
         
         #Set up button callbacks
@@ -75,13 +75,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.entropy_checkbox.clicked.connect(self.display_entropy, self.entropy_checkbox.isChecked())
         self.power_checkbox.clicked.connect(self.display_power, self.power_checkbox.isChecked())
         self.confirm.clicked.connect(self.click_confirm_button)
-        
-        #Set up SpectrogramNavBar signal callbacks
-        self.last_gui_refresh_time = time.time()
-        self.marker = 0
-        self.current_selection = ()
-        self.connect(self.toolbar, QtCore.SIGNAL("set_marker"), self.set_marker)
-        self.connect(self.toolbar, QtCore.SIGNAL("set_selection"), self.set_selection)
         
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
@@ -190,6 +183,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         index = int(self.marker * self.analyzer.active_song.Fs)
         data = self.analyzer.active_song.data[index:index+frame_count]
         
+        #TODO fix set marker AND 
         self.set_marker((index+frame_count)/self.analyzer.active_song.Fs)
         
         return (data, pyaudio.paContinue)    
@@ -367,47 +361,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.display_classification()
             self.set_selection(())
     
-    def set_selection(self, sel):
-        if not sel:
-            self.toolbar.remove_rubberband()
-            self.current_selection = ()
-        else:
-            self.current_selection = sel
-            
-        self.logger.debug('Selection set to %s', str(self.current_selection))
     
-    def set_marker(self, marker):
-        """Sets the marker, but does not update the GUI unless the change in
-        values from the last GUI value is significant"""
-        self.marker = marker
         
-        if time.time() - self.last_gui_refresh_time > 0.05:
-            try:
-                ax = self.toolbar.axis_dict['marker']
-            except KeyError:
-                self.toolbar.add_axis('marker')
-                ax = self.toolbar.axis_dict['marker']
-            
-            if ax.lines:
-                ax.lines.remove(ax.lines[0])
-            
-            ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
-            self.toolbar.set_range('marker', (0,1))
-            self.canvas.draw_idle()
-            
-            new_time = QtCore.QTime(0, self.marker/60, second=self.marker%60, msec=(self.marker%1)*1000)
-            
-            self.time_edit.setTime(new_time)
-            
-            self.last_gui_refresh_time = time.time()
-        
-
-        if (self.marker > self.analyzer.active_song.domain[1]-0.1 and 
-                self.play_button.isChecked()):
-            self.logger.info('Ending playback at end of file')
-            self.play_button.click()
-        
-class SpectrogramCanvas(FigureCanvas):
+class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
     """Subclasses the FigureCanvas to provide features for spectrogram display
     
     Of primary interest is that this class keeps record of all the axes on the
@@ -424,6 +380,7 @@ class SpectrogramCanvas(FigureCanvas):
         self.logger = logging.getLogger('SpectrogramCanvas.logger')
         
         FigureCanvas.__init__(self, figure_)
+        QtCore.QObject.__init()
         
         #A single, unified set of x-boundaries, never violable
         self.x_constraint = ()
@@ -433,6 +390,37 @@ class SpectrogramCanvas(FigureCanvas):
         self.axis_names = []
         
         self.image = None
+        
+        self.last_gui_refresh_time = time.time()
+        self.marker = 0
+        self.current_selection = ()
+        
+    def add_tool(self, tool):
+        self.tools[type(tool).__name__] = tool
+        
+        if isinstance(tool, SpectrogramNavBar):
+            self.connect(tool, QtCore.SIGNAL('navigate'), self.navigate)
+            self.connect(tool, QtCore.SIGNAL('set_selection'), self.set_selection)
+            self.connect(tool, QtCore.SIGNAL('set_marker'), self.set_marker)
+    
+    def navigate(self, **kwargs):
+        navtype = kwargs.get('type', '')
+        
+        if navtype == 'drag_pan':
+            pass 
+        elif navtype == 'release_zoom':
+            pass 
+        elif navtype == 'foward':
+            pass
+        elif navtype == 'back':
+            pass
+        elif navtype == 'home':
+            pass
+        else:
+            #some unknown navtype, or no type provided
+            #check boundaries, validate
+            pass
+    
         
     def add_axis(self, name):
         """Add one axis to this plot, and associate it with name"""
@@ -445,8 +433,84 @@ class SpectrogramCanvas(FigureCanvas):
             self.axis_names.append(name)
                 
         if name in ['marker', 'classification', 'power', 'entropy']:
-            self.axis_dict[name].yaxis.set_visible(False)                
+            self.axis_dict[name].yaxis.set_visible(False) 
+            
+    def set_domain(self, x_domain):
+        """Set the domain for ALL plots (which must share an x-axis domain)"""
         
+        try:
+            assert self.valid(x_domain)
+        except AssertionError:
+            self.logger.warning("Assert failed: the domain command %s is" 
+                    "out of bounds", str(x_domain))
+            return
+     
+        self.logger.debug('Setting the plot domain to %s', str(x_domain))
+
+        for name in self.axis_names:
+            ax = self.axis_dict[name]
+            self.logger.debug('Setting domain for axis %s to %s', name, str(x_domain))
+            ax.set_xlim(x_domain)
+            
+        self.draw_idle()
+        
+    def set_range(self, name, y_range):
+        """Set the y-axis range of the plot associated with name"""
+        
+        try:
+            ax = self.axis_dict[name]
+        except KeyError:
+            self.logger.warning('No such axis %s to set the range', name)
+            return
+        
+        self.logger.debug('Setting the range of %s to %s', name, str(y_range))
+        ax.set_ylim(y_range)
+        
+        self.draw_idle()
+        
+    def set_all_ranges(self, yranges):
+        """Set the range (y-axis) of all plots linked to this NavBar"""
+        
+        try:
+            for idx, yrange in enumerate(yranges):
+                self.set_range(self.axis_names[idx], yrange)
+        except IndexError:
+            self.logger.warning('Too many yranges provided, there are only %d' 
+                    'axes available', len(self.axis_names)+1)
+            return
+    
+    def set_selection(self, sel):
+        if not sel:
+            self.current_selection = ()
+        else:
+            self.current_selection = sel
+            
+        self.logger.debug('Selection set to %s', str(self.current_selection))
+    
+    def set_marker(self, marker):
+        """Sets the marker, but does not update the GUI unless the change in
+        values from the last GUI value is significant
+        
+        Might later emit a signal of some sort
+        """
+        self.marker = marker
+        
+        if time.time() - self.last_gui_refresh_time > 0.05:
+            try:
+                ax = self.axis_dict['marker']
+            except KeyError:
+                self.add_axis('marker')
+                ax = self.axis_dict['marker']
+            
+            if ax.lines:
+                ax.lines.remove(ax.lines[0])
+            
+            ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
+            self.set_range('marker', (0,1))
+            self.draw_idle()
+            
+            
+         
 class SpectrogramNavBar(NavigationToolbar2QT):
     """Provides a navigation bar specially configured for spectrogram interaction
     
@@ -457,16 +521,18 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     The navigation bar tools have been updated.  The left and right buttons 
     scroll left and right, rather than moving between views.  The pan and zoom 
     buttons are identical, but with the horizontal bound enforced.  Several 
-    buttons are removed, and a 'select' button has been added whichis used for 
+    buttons are removed, and a 'select' button has been added which is used for 
     manual classification of data.
+    
+    Emits a signal 'navigate' which is called any time an action is take which
+    would change the plot bounds.
     """
     
     
     def __init__(self, canvas_, parent_, *args, **kwargs):  
         """Creates a SpectrogramNavigationBar instance
         
-        This method initializes logging, creates an empty dictionary of axes,
-        an empty selection
+        Requires that canvas_ be a SpectrogramCanvas
         """ 
         
         #initialize logging
@@ -518,56 +584,20 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.coordinates = True
                     
         self._idSelect = None
-   
+        
+        try:
+            self.canvas_.add_tool(self)
+        except AttributeError as e:
+            self.logger.error('Cannot initialize SpectrogramNavBar - canvas '
+                    'type not valid')
+            raise e
+        
     def local_icon(self, name):
         imagefile = os.path.join(self.icons_dir, name)
         
         self.logger.debug('Icon image file %s', imagefile)
         return QtGui.QIcon(imagefile)
-     
-    def set_domain(self, x_domain):
-        """Set the domain for ALL plots (which must share an x-axis domain)"""
-        
-        try:
-            assert self.valid(x_domain)
-        except AssertionError:
-            self.logger.warning("Assert failed: the domain command %s is" 
-                    "out of bounds", str(x_domain))
-            return
-     
-        self.logger.debug('Setting the plot domain to %s', str(x_domain))
 
-        for name in self.axis_names:
-            ax = self.axis_dict[name]
-            self.logger.debug('Setting domain for axis %s to %s', name, str(x_domain))
-            ax.set_xlim(x_domain)
-            
-        self.dynamic_update()
-    
-    def set_range(self, name, y_range):
-        """Set the y-axis range of the plot associated with name"""
-        
-        try:
-            ax = self.axis_dict[name]
-        except KeyError:
-            self.logger.warning('No such axis %s to set the range', name)
-            return
-        
-        self.logger.debug('Setting the range of %s to %s', name, str(y_range))
-        ax.set_ylim(y_range)
-        
-        self.dynamic_update()
-    
-    def set_all_ranges(self, yranges):
-        """Set the range (y-axis) of all plots linked to this NavBar"""
-        
-        try:
-            for idx, yrange in enumerate(yranges):
-                self.set_range(self.axis_names[idx], yrange)
-        except IndexError:
-            self.logger.warning('Too many yranges provided, there are only %d' 
-                    'axes available', len(self.axis_names)+1)
-            return
 
     def forward(self, *args):
         """OVERRIDE the foward function in backend_bases.NavigationToolbar2
