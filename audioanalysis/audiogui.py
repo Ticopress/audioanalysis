@@ -199,161 +199,55 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         data = self.analyzer.active_song.data[index:index+frame_count]
         
         #TODO fix set marker AND 
-        self.set_marker((index+frame_count)/self.analyzer.active_song.Fs)
+        self.canvas.set_marker((index+frame_count)/self.analyzer.active_song.Fs)
         
         return (data, pyaudio.paContinue)    
     
     def click_confirm_button(self):
         self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
         self.logger.info('Neural network generated')
-    def show_data(self):
+    
+    
+    def select_song(self):
         """Put all applicable data from the Model to the View
         
         This function assumes all preprocessing has been completed and merely
         looks at the state of the model and displays it
         """
-        self.display_spectrogram()
-
-        self.display_classification()
         
-        self.display_entropy(show=self.entropy_checkbox.isChecked())
+        self.analyzer.set_active(self.analyzer.songs[0])
         
-        self.display_power(show=self.power_checkbox.isChecked())
+        for p in ['spectrogram', 'classification', 'entropy', 'power']:
+            self.plot(p)
         
-        self.set_marker(0)
-        self.set_selection(())
+        self.canvas.set_marker(0)
+        self.canvas.set_selection(())
         
-        self.toolbar.x_constraint = self.analyzer.active_song.domain       
-        self.toolbar.set_domain(self.analyzer.active_song.domain)
-
-    def display_spectrogram(self):
-        """Fetches spectrogram data from analyzer and plots it
-        
-        NO display method affects the domain in any way.  That must be done
-        external to the display method
-        """   
-                              
+    def plot(self, plot_type):
         t_step = self.params['time_downsample_disp']
         f_step = self.params['freq_downsample_disp']
         
         try:   
             time = self.analyzer.active_song.time[::t_step]
             freq = self.analyzer.active_song.freq[::f_step]
-        except AttributeError:
-            self.logger.error('No active song, cannot display spectrogram')
-            return
-            
-        try: 
+            classification = self.analyzer.active_song.classifications[::t_step]
+            entropy = self.analyzer.active_song.entropy[::t_step]
+            power = self.analyzer.active_song.power[::t_step]
             disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
         except AttributeError:
-            self.logger.error('No calculated spectrogram, cannot display')
-            return
-          
-        try:
-            ax = self.toolbar.axis_dict['spectrogram']
-        except KeyError:
-            self.toolbar.add_axis('spectrogram') 
-            ax = self.toolbar.axis_dict['spectrogram']
-        
-        halfbin_time = (time[1] - time[0]) / 2.0
-        halfbin_freq = (freq[1] - freq[0]) / 2.0
-        
-        # this method is much much faster!
-        # center bin
-        extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
-                  freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
-        
-        self.toolbar.image = ax.imshow(disp_Sxx, 
-                interpolation="nearest", 
-                extent=extent,
-                cmap='gray_r',
-                vmin=self.params['vmin'],
-                vmax=self.params['vmax']
-                )
-        
-        ax.axis('tight')
-  
-        self.toolbar.set_range('spectrogram', self.analyzer.active_song.range)        
-        self.canvas.draw_idle()
-    
-    def display_classification(self):
-        """Fetches classification data from analyzer and plots it
-        
-        NO display method affects the domain in any way.  That must be done
-        external to the display method
-        """
-        try:
-            classes = self.analyzer.active_song.classification
-            time = self.analyzer.active_song.time
-        except AttributeError:
-            self.logger.error('No active song to display')
+            self.logger.error('No active song, cannot display plot %s', plot_type)
             return
         
-        try:
-            ax = self.toolbar.axis_dict['classification']
-        except KeyError:
-            self.toolbar.add_axis('classification')
-            ax = self.toolbar.axis_dict['classification']
-        
-        if ax.lines:
-            ax.lines.remove(ax.lines[0])
-            
-        ax.plot(time, classes, 'b-')
-        
-        self.toolbar.set_range('classification', (0, max(classes)+1))
-
-        self.canvas.draw_idle()
-        
-    def display_entropy(self, show=True):
-        try:
-            entropy = self.analyzer.active_song.entropy
-            time = self.analyzer.active_song.time
-        except AttributeError:
-            self.logger.warning('No active song to display')
-            return
-         
-        try:
-            ax = self.toolbar.axis_dict['entropy']
-        except KeyError:
-            self.toolbar.add_axis('entropy')
-            ax = self.toolbar.axis_dict['entropy']
-             
-        
-        if ax.lines:
-            ax.lines.remove(ax.lines[0])
-            
-        l, = ax.plot(time, entropy, 'g-')
-           
-        self.toolbar.set_range('entropy', (min(entropy), max(entropy)))
-
-        l.set_visible(show)
-
-        self.canvas.draw_idle()
-    
-    def display_power(self, show=True):
-        try:
-            ax = self.toolbar.axis_dict['power']
-        except KeyError:
-            self.toolbar.add_axis('power')
-            ax = self.toolbar.axis_dict['power']
-
-        try:
-            power = self.analyzer.active_song.power
-            time = self.analyzer.active_song.time
-        except AttributeError:
-            self.logger.error('No active song to display')
-            return
-        
-        if ax.lines:
-            ax.lines.remove(ax.lines[0])
-            
-        l, = ax.plot(time, power, 'r-')
-
-        self.toolbar.set_range('power', (min(power), max(power)))
-        
-        l.set_visible(show)
-        
-        self.canvas.draw_idle()
+        if plot_type == 'spectrogram':
+            pass
+        elif plot_type == 'classification':
+            pass
+        elif plot_type == 'entropy':
+            pass
+        elif plot_type == 'power':
+            pass
+        else:
+            self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
 
         
     def keyPressEvent(self, e):
@@ -529,7 +423,105 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             self.draw_idle()
             self.last_gui_refresh_time = t
             
+    def display_spectrogram(self, t, f, Sxx):
+        """Fetches spectrogram data from analyzer and plots it
+        
+        NO display method affects the domain in any way.  That must be done
+        external to the display method
+        """   
+          
+        try:
+            ax = self.axis_dict['spectrogram']
+        except KeyError:
+            self.add_axis('spectrogram') 
+            ax = self.axis_dict['spectrogram']
+        
+        halfbin_time = (t[1] - t[0]) / 2.0
+        halfbin_freq = (f[1] - f[0]) / 2.0
+        
+        # this method is much much faster!
+        # center bin
+        extent = (t[0] - halfbin_time, t[-1] + halfbin_time,
+                  f[0] - halfbin_freq, f[-1] + halfbin_freq)
+        
+        self.image = ax.imshow(Sxx, 
+                interpolation="nearest", 
+                extent=extent,
+                cmap='gray_r',
+                vmin=self.params['vmin'],
+                vmax=self.params['vmax']
+                )
+        
+        ax.axis('tight')
+        
+        self.x_constraint = (min(t), max(t))
+        self.set_domain(self.x_constraint)
+        self.set_range('spectrogram', (min(f), max(f)))
+  
+        self.draw_idle() 
+        
+    def display_classification(self, t, classes, show=True):
+        """Fetches classification data from analyzer and plots it
+        
+        NO display method affects the domain in any way.  That must be done
+        external to the display method
+        """
+        
+        try:
+            ax = self.axis_dict['classification']
+        except KeyError:
+            self.add_axis('classification')
+            ax = self.axis_dict['classification']
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
             
+        l, = ax.plot(t, classes, 'b-')
+        
+        self.set_range('classification', (0, max(classes)+1))
+        
+        l.set_visible(show)
+
+        self.canvas.draw_idle() 
+        
+        
+    def display_entropy(self, t, entropy, show=True):
+
+        try:
+            ax = self.axis_dict['entropy']
+        except KeyError:
+            self.add_axis('entropy')
+            ax = self.axis_dict['entropy']
+             
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        l, = ax.plot(t, entropy, 'g-')
+           
+        self.set_range('entropy', (min(entropy), max(entropy)))
+
+        l.set_visible(show)
+
+        self.draw_idle()  
+        
+    def display_power(self, t, power, show=True):
+        try:
+            ax = self.axis_dict['power']
+        except KeyError:
+            self.add_axis('power')
+            ax = self.axis_dict['power']
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        l, = ax.plot(t, power, 'r-')
+
+        self.set_range('power', (min(power), max(power)))
+        
+        l.set_visible(show)
+        
+        self.draw_idle()        
          
 class SpectrogramNavBar(NavigationToolbar2QT):
     """Provides a navigation bar specially configured for spectrogram interaction

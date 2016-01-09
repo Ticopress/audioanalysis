@@ -50,6 +50,9 @@
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
+          <property name="toolTip">
+           <string>List of loaded song files</string>
+          </property>
          </widget>
         </item>
        </layout>
@@ -87,8 +90,11 @@
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
+            <property name="toolTip">
+             <string>Press to play the highlighted song</string>
+            </property>
             <property name="text">
-             <string>Play Song</string>
+             <string>Play</string>
             </property>
             <property name="icon">
              <iconset>
@@ -109,25 +115,6 @@
            </widget>
           </item>
           <item>
-           <widget class="QTimeEdit" name="time_edit">
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="buttonSymbols">
-             <enum>QAbstractSpinBox::UpDownArrows</enum>
-            </property>
-            <property name="currentSection">
-             <enum>QDateTimeEdit::MinuteSection</enum>
-            </property>
-            <property name="displayFormat">
-             <string>mm:ss.zzz</string>
-            </property>
-            <property name="timeSpec">
-             <enum>Qt::OffsetFromUTC</enum>
-            </property>
-           </widget>
-          </item>
-          <item>
            <spacer name="horizontalSpacer">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
@@ -142,6 +129,9 @@
           </item>
           <item>
            <widget class="QCheckBox" name="entropy_checkbox">
+            <property name="toolTip">
+             <string>Display plot of Wiener entropy</string>
+            </property>
             <property name="text">
              <string>Entropy</string>
             </property>
@@ -149,6 +139,9 @@
           </item>
           <item>
            <widget class="QCheckBox" name="power_checkbox">
+            <property name="toolTip">
+             <string>Display plot of average power</string>
+            </property>
             <property name="text">
              <string>Power</string>
             </property>
@@ -202,6 +195,14 @@
     <addaction name="actiondump"/>
     <addaction name="actionclassify"/>
    </widget>
+   <widget class="QMenu" name="menuSongs">
+    <property name="title">
+     <string>Songs</string>
+    </property>
+    <addaction name="actionLoad_Songs"/>
+    <addaction name="actionLoad_Song_Folder"/>
+   </widget>
+   <addaction name="menuSongs"/>
    <addaction name="menuNeural_Net"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
@@ -228,6 +229,16 @@
   <action name="actionclassify">
    <property name="text">
     <string>Classify All Songs</string>
+   </property>
+  </action>
+  <action name="actionLoad_Songs">
+   <property name="text">
+    <string>Load Song Files</string>
+   </property>
+  </action>
+  <action name="actionLoad_Song_Folder">
+   <property name="text">
+    <string>Load Song Folder</string>
    </property>
   </action>
  </widget>
