@@ -408,9 +408,44 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.play_button.click()
         
 class SpectrogramCanvas(FigureCanvas):
+    """Subclasses the FigureCanvas to provide features for spectrogram display
+    
+    Of primary interest is that this class keeps record of all the axes on the
+    plot by name, with independent y scales but a uniform x-scale.  The primary
+    intent of this class is to bound the x-scale so that it is impossible to
+    scroll, pan, or zoom outside of the domain set in the public instance
+    variable x_constraint.  Anything that moves that plot that is not contained
+    within this class should emit a signal which should be bound to this class's
+    'navigate' method.  navigate corrects for any navigation not done by the 
+    SpectrogramCanvas and then redraws.
+    """
     
     def __init__(self, figure_):
+        self.logger = logging.getLogger('SpectrogramCanvas.logger')
+        
         FigureCanvas.__init__(self, figure_)
+        
+        #A single, unified set of x-boundaries, never violable
+        self.x_constraint = ()
+        #Dictionary mapping str->axis object
+        self.axis_dict = {}
+        #Ordered list of axis names, in order added
+        self.axis_names = []
+        
+        self.image = None
+        
+    def add_axis(self, name):
+        """Add one axis to this plot, and associate it with name"""
+        
+        if not self.axis_dict:
+            self.axis_dict[name] = self.canvas.figure.add_subplot(111)
+            self.axis_names.append(name)
+        else:
+            self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
+            self.axis_names.append(name)
+                
+        if name in ['marker', 'classification', 'power', 'entropy']:
+            self.axis_dict[name].yaxis.set_visible(False)                
         
 class SpectrogramNavBar(NavigationToolbar2QT):
     """Provides a navigation bar specially configured for spectrogram interaction
@@ -418,18 +453,12 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     This class overrides a number of the methods of the standard 
     NavigationToolbar2QT and NavigationToolbar2, and adds some convenience
     methods.
-    
-    Of primary interest is that this class keeps record of all the axes on the
-    plot by name, with independent y scales but a uniform x-scale.  The primary
-    intent of this class is to bound the x-scale so that it is impossible to
-    scroll, pan, or zoom outside of the domain set in the public instance
-    variable x_constraint.  
-    
-    Additionally, the navigation bar tools have been updated.  The left and 
-    right buttons scroll left and right, rather than moving between views.  The 
-    pan and zoom buttons are identical, but with the horizontal bound enforced.  
-    Several buttons are removed, and a 'select' button has been added which
-    is used for manual classification of data.
+
+    The navigation bar tools have been updated.  The left and right buttons 
+    scroll left and right, rather than moving between views.  The pan and zoom 
+    buttons are identical, but with the horizontal bound enforced.  Several 
+    buttons are removed, and a 'select' button has been added whichis used for 
+    manual classification of data.
     """
     
     
@@ -455,15 +484,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         )
         
         NavigationToolbar2QT.__init__(self, canvas_, parent_, coordinates=False)
-                
-        #A single, unified set of x-boundaries, never violable
-        self.x_constraint = ()
-        #Dictionary mapping str->axis object
-        self.axis_dict = {}
-        #Ordered list of axis names, in order added
-        self.axis_names = []
-        
-        self.image = None
                 
         self.custom_toolitems = (
             (None, None, None, None),
@@ -504,19 +524,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
         self.logger.debug('Icon image file %s', imagefile)
         return QtGui.QIcon(imagefile)
-         
-    def add_axis(self, name):
-        """Add one axis to this plot, and associate it with name"""
-        
-        if not self.axis_dict:
-            self.axis_dict[name] = self.canvas.figure.add_subplot(111)
-            self.axis_names.append(name)
-        else:
-            self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
-            self.axis_names.append(name)
-                
-        if name in ['marker', 'classification', 'power', 'entropy']:
-            self.axis_dict[name].yaxis.set_visible(False)
      
     def set_domain(self, x_domain):
         """Set the domain for ALL plots (which must share an x-axis domain)"""
