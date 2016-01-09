@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>686</width>
-    <height>459</height>
+    <width>743</width>
+    <height>466</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -17,7 +17,7 @@
    </sizepolicy>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Jarvis Lab Audio Analyzer</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -26,39 +26,95 @@
       <item>
        <layout class="QVBoxLayout" name="verticalLayout_3">
         <item>
-         <widget class="QPushButton" name="open_file">
-          <property name="minimumSize">
-           <size>
-            <width>155</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Load File/Folder</string>
-          </property>
-          <property name="icon">
-           <iconset>
-            <normaloff>icons/wave.png</normaloff>icons/wave.png</iconset>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QTableWidget" name="table">
+         <widget class="QTabWidget" name="tabs">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
-          <property name="toolTip">
-           <string>List of loaded song files</string>
+          <property name="tabPosition">
+           <enum>QTabWidget::North</enum>
           </property>
+          <property name="tabShape">
+           <enum>QTabWidget::Rounded</enum>
+          </property>
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <property name="usesScrollButtons">
+           <bool>false</bool>
+          </property>
+          <widget class="QWidget" name="sf_tab">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <attribute name="title">
+            <string>Songs</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_2">
+            <property name="margin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QTableWidget" name="songfile_table">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="toolTip">
+               <string>List of loaded song files</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="motif_tab">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <attribute name="title">
+            <string>Motifs</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_5">
+            <property name="margin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QTableWidget" name="motif_table"/>
+            </item>
+           </layout>
+          </widget>
          </widget>
         </item>
        </layout>
       </item>
       <item>
        <layout class="QVBoxLayout" name="verticalLayout_4">
+        <item>
+         <spacer name="verticalSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Fixed</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout">
           <item>
@@ -75,7 +131,11 @@
               <height>200</height>
              </size>
             </property>
-            <layout class="QVBoxLayout" name="plot_vl"/>
+            <layout class="QVBoxLayout" name="plot_vl">
+             <property name="margin">
+              <number>0</number>
+             </property>
+            </layout>
            </widget>
           </item>
          </layout>
@@ -182,28 +242,45 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>686</width>
+     <width>743</width>
      <height>22</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuNeural_Net">
+   <widget class="QMenu" name="menuFile">
     <property name="title">
-     <string>Neural Net</string>
+     <string>File</string>
     </property>
-    <addaction name="actioncreate"/>
-    <addaction name="actionload"/>
-    <addaction name="actiondump"/>
-    <addaction name="actionclassify"/>
+    <widget class="QMenu" name="menuOpen">
+     <property name="title">
+      <string>Open...</string>
+     </property>
+     <addaction name="action_load_files"/>
+     <addaction name="action_load_folder"/>
+     <addaction name="separator"/>
+     <addaction name="action_load_nn"/>
+    </widget>
+    <widget class="QMenu" name="menuSave">
+     <property name="title">
+      <string>Save...</string>
+     </property>
+     <addaction name="action_save_all_motifs"/>
+     <addaction name="action_save_current_motif"/>
+     <addaction name="separator"/>
+     <addaction name="action_save_nn"/>
+    </widget>
+    <widget class="QMenu" name="menuNew">
+     <property name="title">
+      <string>New...</string>
+     </property>
+     <addaction name="action_new_nn"/>
+    </widget>
+    <addaction name="menuNew"/>
+    <addaction name="menuOpen"/>
+    <addaction name="menuSave"/>
+    <addaction name="separator"/>
+    <addaction name="action_classify_songs"/>
    </widget>
-   <widget class="QMenu" name="menuSongs">
-    <property name="title">
-     <string>Songs</string>
-    </property>
-    <addaction name="actionLoad_Songs"/>
-    <addaction name="actionLoad_Song_Folder"/>
-   </widget>
-   <addaction name="menuSongs"/>
-   <addaction name="menuNeural_Net"/>
+   <addaction name="menuFile"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionMotif_Selection">
@@ -239,6 +316,51 @@
   <action name="actionLoad_Song_Folder">
    <property name="text">
     <string>Load Song Folder</string>
+   </property>
+  </action>
+  <action name="action_save_nn">
+   <property name="text">
+    <string>Neural Net to File</string>
+   </property>
+  </action>
+  <action name="action_load_nn">
+   <property name="text">
+    <string>Neural Net from File</string>
+   </property>
+  </action>
+  <action name="action_load_files">
+   <property name="text">
+    <string>WAV File/Files</string>
+   </property>
+  </action>
+  <action name="action_load_folder">
+   <property name="text">
+    <string>Folder of WAV Files</string>
+   </property>
+  </action>
+  <action name="action_new_nn">
+   <property name="text">
+    <string>Neural Net</string>
+   </property>
+  </action>
+  <action name="action_classify_songs">
+   <property name="text">
+    <string>Classify Songs</string>
+   </property>
+  </action>
+  <action name="actionCurrent_Song">
+   <property name="text">
+    <string>Current Song</string>
+   </property>
+  </action>
+  <action name="action_save_current_motif">
+   <property name="text">
+    <string>Current Motif</string>
+   </property>
+  </action>
+  <action name="action_save_all_motifs">
+   <property name="text">
+    <string>All Motifs</string>
    </property>
   </action>
  </widget>

@@ -31,7 +31,7 @@ from matplotlib.backend_bases import cursors
 
 from PyQt4 import QtGui, QtCore
 
-import logging, sys, os, pyaudio, time
+import logging, sys, os, pyaudio, time, fnmatch
 import numpy as np
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
@@ -69,13 +69,18 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.set_canvas(canvas, self.plot_vl)
         
         #Set up button callbacks
-        self.open_file.clicked.connect(self.file_open_dialog)
         self.play_button.clicked.connect(self.click_play_button)
-        self.entropy_checkbox.clicked.connect(self.display_entropy, self.entropy_checkbox.isChecked())
-        self.power_checkbox.clicked.connect(self.display_power, self.power_checkbox.isChecked())
+        self.entropy_checkbox.clicked.connect(lambda: self.plot('entropy'))
+        self.power_checkbox.clicked.connect(lambda: self.plot('power'))
         
+        #Set up menu callbacks
+        self.action_load_files.triggered.connect(self.select_wav_files)
+        self.action_load_folder.triggered.connect(self.select_wav_folder)
+        self.action_load_nn.triggered.connect(self.select_neural_net_file)
         
-        self.table.setHorizontalHeaderLabels(['H1', 'H2', 'H3'])
+        self.action_new_nn.triggered.connect(self.create_new_neural_net)
+        
+        #self.table.setHorizontalHeaderLabels(['H1', 'H2', 'H3'])
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
@@ -126,19 +131,50 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Connect any slots coming from canvas here
         #-----slots-----
     
-    def file_open_dialog(self):
-        """Provide a standard file open dialog to import .wav data into the 
-        model classes"""  
+    def select_wav_files(self):
+        """Load one or more wav files as SongFiles"""
         self.logger.debug('Clicked the file select button')
-        
-        if self.play_button.isChecked():
-            self.play_button.click()
               
-        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', 
-                '/home', 'WAV files (*.wav)')
+        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Select file(s)', 
+                '', 'WAV files (*.wav)')
+        if file_names:
+            self.load_wav_files(file_names)
+        else:
+            self.logger.debug('Cancelled file select')
+            
+    def select_wav_folder(self):
+        """Load all .wav files in a folder and all its subfolders as SongFiles"""
+        
+        self.logger.debug('Clicked the folder select button')
+              
+        folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
+        self.logger.info('selected %s', str(folder_name))
+        if folder_name:
+            pass
+            self.load_wav_files(self.find_files(str(folder_name), '*.wav'))
+        else:
+            self.logger.debug('Cancelled file select')
+    
+    def find_files(self, directory, pattern):
+        """Recursively walk a directory and return filenames matching pattern"""
+        
+        files_out = []
+        for root, _, files in os.walk(directory):
+            self.logger.debug('Looking in %s', str(root))
+            for basename in files:
+                self.logger.debug('Found basename %s', str(basename))
+                if fnmatch.fnmatch(basename, pattern):
+                    filename = os.path.join(root, basename)
+                    
+                    files_out.append(filename)
+                    
+        return files_out
+    
+    def load_wav_files(self, file_names):
+        """Load a list of wave files as SongFiles"""
         
         for f in file_names:
-            self.logger.debug('Selected the file %s', str(f))
+            self.logger.debug('Loading the file %s', str(f))
             
             new_songs = SongFile.load(
                             str(f),
@@ -149,14 +185,31 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     len(new_songs))
             
             self.analyzer.songs.extend(new_songs)
-            self.update_table()
+            self.update_table('songs')
+                    
+    
+    def update_table(self, name):
+        """Display information on loaded SongFiles in the table"""
+        if name=='songs':
+            pass
+        elif name=='motifs':
+            pass
+        else:
+            self.logger.warning('No table %s, cannot update', name)
+    
+    def select_neural_net_file(self):
+        """Load one or more wav files as SongFiles"""
+        self.logger.debug('Clicked the file select button')
+              
+        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', 
+                '/home', 'Neural Net files (*.nn)')
+        if file_names:
+            self.load_wav_files(file_names)
         else:
             self.logger.debug('Cancelled file select')
     
-    def update_table(self):
-        pass
-    
     def click_play_button(self):
+        """Callback for clicking the GUI button"""
         try:
             if self.play_button.isChecked():
                 self.start_playback()
@@ -195,18 +248,25 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.stream.close()
 
     def play_audio_callback(self, in_data, frame_count, time_info, status):
-        index = int(self.marker * self.analyzer.active_song.Fs)
+        """Callback for separate thread that plays audio
+        
+        This is responsible for moving the marker on the canvas, and since the
+        stream auto-dies when it reaches the end of the data, no handling is
+        needed to make sure the marker stops moving
+        """
+        
+        index = int(self.canvas.marker * self.analyzer.active_song.Fs)
         data = self.analyzer.active_song.data[index:index+frame_count]
         
-        #TODO fix set marker AND 
         self.canvas.set_marker((index+frame_count)/self.analyzer.active_song.Fs)
         
         return (data, pyaudio.paContinue)    
     
-    def click_confirm_button(self):
+    def create_new_neural_net(self):
+        """Uses the Analyzer's active_song to construct and train a neural net"""
         self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
-        self.logger.info('Neural network generated')
-    
+        
+        #then, train it
     
     def select_song(self):
         """Put all applicable data from the Model to the View

@@ -41,7 +41,7 @@ from setuptools import setup
 import os
 
 def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+    return open(os.path.join(os.path.dirname(__file__), name)).read()
 
 
 setup(name='audioanalysis',
