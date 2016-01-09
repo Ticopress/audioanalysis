@@ -407,7 +407,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.info('Ending playback at end of file')
             self.play_button.click()
         
-
+class SpectrogramCanvas(FigureCanvas):
+    
+    def __init__(self, figure_):
+        FigureCanvas.__init__(self, figure_)
         
 class SpectrogramNavBar(NavigationToolbar2QT):
     """Provides a navigation bar specially configured for spectrogram interaction
@@ -438,7 +441,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         """ 
         
         #initialize logging
-        self.logger = logging.getLogger('NavBar.logger')
+        self.logger = logging.getLogger('SpectrogramNavBar.logger')
             
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
