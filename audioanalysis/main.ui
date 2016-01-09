@@ -40,7 +40,7 @@
            <enum>QTabWidget::Rounded</enum>
           </property>
           <property name="currentIndex">
-           <number>0</number>
+           <number>1</number>
           </property>
           <property name="usesScrollButtons">
            <bool>false</bool>
@@ -70,6 +70,21 @@
               <property name="toolTip">
                <string>List of loaded song files</string>
               </property>
+              <column>
+               <property name="text">
+                <string>File</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Start</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Length</string>
+               </property>
+              </column>
              </widget>
             </item>
            </layout>
@@ -89,7 +104,26 @@
              <number>0</number>
             </property>
             <item>
-             <widget class="QTableWidget" name="motif_table"/>
+             <widget class="QTableWidget" name="motif_table">
+              <property name="toolTip">
+               <string>List of discovered motifs</string>
+              </property>
+              <column>
+               <property name="text">
+                <string>File</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Start</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Length</string>
+               </property>
+              </column>
+             </widget>
             </item>
            </layout>
           </widget>
@@ -188,6 +222,13 @@
            </spacer>
           </item>
           <item>
+           <widget class="QCheckBox" name="classes_checkbox">
+            <property name="text">
+             <string>Classifications</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QCheckBox" name="entropy_checkbox">
             <property name="toolTip">
              <string>Display plot of Wiener entropy</string>
@@ -252,14 +293,14 @@
     </property>
     <widget class="QMenu" name="menuOpen">
      <property name="title">
-      <string>Open...</string>
+      <string>Load...</string>
      </property>
      <addaction name="action_load_files"/>
      <addaction name="action_load_folder"/>
      <addaction name="separator"/>
      <addaction name="action_load_nn"/>
     </widget>
-    <widget class="QMenu" name="menuSave">
+    <widget class="QMenu" name="menuLoad">
      <property name="title">
       <string>Save...</string>
      </property>
@@ -274,11 +315,26 @@
      </property>
      <addaction name="action_new_nn"/>
     </widget>
+    <widget class="QMenu" name="menuClassify">
+     <property name="title">
+      <string>Classify</string>
+     </property>
+     <addaction name="action_classify_all"/>
+     <addaction name="action_classify_current"/>
+    </widget>
+    <widget class="QMenu" name="menuFind_Motifs">
+     <property name="title">
+      <string>Find Motifs</string>
+     </property>
+     <addaction name="action_find_all_motifs"/>
+     <addaction name="action_find_current_motifs"/>
+    </widget>
     <addaction name="menuNew"/>
     <addaction name="menuOpen"/>
-    <addaction name="menuSave"/>
+    <addaction name="menuLoad"/>
     <addaction name="separator"/>
-    <addaction name="action_classify_songs"/>
+    <addaction name="menuClassify"/>
+    <addaction name="menuFind_Motifs"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
@@ -343,11 +399,6 @@
     <string>Neural Net</string>
    </property>
   </action>
-  <action name="action_classify_songs">
-   <property name="text">
-    <string>Classify Songs</string>
-   </property>
-  </action>
   <action name="actionCurrent_Song">
    <property name="text">
     <string>Current Song</string>
@@ -361,6 +412,26 @@
   <action name="action_save_all_motifs">
    <property name="text">
     <string>All Motifs</string>
+   </property>
+  </action>
+  <action name="action_classify_all">
+   <property name="text">
+    <string>All Songs</string>
+   </property>
+  </action>
+  <action name="action_classify_current">
+   <property name="text">
+    <string>Current Song</string>
+   </property>
+  </action>
+  <action name="action_find_all_motifs">
+   <property name="text">
+    <string>All Songs</string>
+   </property>
+  </action>
+  <action name="action_find_current_motifs">
+   <property name="text">
+    <string>Current Song</string>
    </property>
   </action>
  </widget>

@@ -20,7 +20,6 @@ You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
 
-from freqanalysis import AudioAnalyzer, SongFile
 from PyQt4.uic import loadUiType
 
 from matplotlib.figure import Figure
@@ -34,10 +33,13 @@ from PyQt4 import QtGui, QtCore
 import logging, sys, os, pyaudio, time, fnmatch
 import numpy as np
 
+from freqanalysis import AudioAnalyzer, SongFile
+
+
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
 class AudioGUI(Ui_MainWindow, QMainWindow):
-    """AudioGUI docstring goes here TODO
+    """The GUI for automatically identifying motifs
     
     
     """
@@ -56,13 +58,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
-        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        sys.stdout = OutLog(self.console, sys.stdout)
+        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
         # Initialize the basic plot area
-        
         canvas = SpectrogramCanvas(Figure())
         toolbar = SpectrogramNavBar(canvas, self)
 
@@ -72,6 +73,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.play_button.clicked.connect(self.click_play_button)
         self.entropy_checkbox.clicked.connect(lambda: self.plot('entropy'))
         self.power_checkbox.clicked.connect(lambda: self.plot('power'))
+        self.classes_checkbox.clicked.connect(lambda: self.plot('classification'))
         
         #Set up menu callbacks
         self.action_load_files.triggered.connect(self.select_wav_files)
@@ -80,7 +82,16 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.action_new_nn.triggered.connect(self.create_new_neural_net)
         
-        #self.table.setHorizontalHeaderLabels(['H1', 'H2', 'H3'])
+        self.action_save_all_motifs.triggered.connect(lambda: self.save_motifs('all'))
+        self.action_save_current_motif.triggered.connect(lambda: self.save_motifs('current'))
+        self.action_save_nn.triggered.connect(self.save_neural_net)
+        
+        self.action_classify_all.triggered.connect(lambda: self.auto_classify('all'))
+        self.action_classify_current.triggered.connect(lambda: self.auto_classify('current'))
+        
+        self.action_find_all_motifs.triggered.connect(lambda: self.find_motifs('all'))
+        self.action_find_current_motifs.triggered.connect(lambda: self.find_motifs('current'))
+        
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
@@ -155,21 +166,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.debug('Cancelled file select')
     
-    def find_files(self, directory, pattern):
-        """Recursively walk a directory and return filenames matching pattern"""
-        
-        files_out = []
-        for root, _, files in os.walk(directory):
-            self.logger.debug('Looking in %s', str(root))
-            for basename in files:
-                self.logger.debug('Found basename %s', str(basename))
-                if fnmatch.fnmatch(basename, pattern):
-                    filename = os.path.join(root, basename)
-                    
-                    files_out.append(filename)
-                    
-        return files_out
-    
     def load_wav_files(self, file_names):
         """Load a list of wave files as SongFiles"""
         
@@ -207,7 +203,31 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.load_wav_files(file_names)
         else:
             self.logger.debug('Cancelled file select')
+            
+    def create_new_neural_net(self):
+        """Uses the Analyzer's active_song to construct and train a neural net"""
+        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
+        
+        #then, train it
+        
+    def save_neural_net(self):
+        """Save the analyzer's current neural net to a file to avoid training"""
+        pass
     
+    def save_motifs(self, mode):
+        if mode == 'all':
+            #Get a folder, put them there
+            pass
+        elif mode == 'current':
+            #Get a filename, put it there
+            pass
+        else:
+            #Get a filename, put it there
+            try:
+                self.analyzer.motifs[mode].export()
+            except TypeError:
+                self.logger.error('Unknown motif export mode, cannot export')
+            
     def click_play_button(self):
         """Callback for clicking the GUI button"""
         try:
@@ -262,12 +282,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return (data, pyaudio.paContinue)    
     
-    def create_new_neural_net(self):
-        """Uses the Analyzer's active_song to construct and train a neural net"""
-        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
-        
-        #then, train it
-    
     def select_song(self):
         """Put all applicable data from the Model to the View
         
@@ -283,14 +297,42 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.canvas.set_marker(0)
         self.canvas.set_selection(())
         
+    def keyPressEvent(self, e):
+        """Listens for a keypress
+        
+        If the keypress is a number and a region has been selected with the
+        select tool, the keypress will assign the value of that number to be
+        the classification of the selected region
+        """
+        if (e.text() in [str(i) for i in range(10)] and 
+                self.canvas.current_selection):
+            indices = np.searchsorted(self.analyzer.active_song.time, 
+                    np.asarray(self.canvas.current_selection))
+            
+            self.analyzer.active_song.classification[indices[0]:indices[1]] = int(e.text())
+            
+            self.logger.debug('Updating class from %s to be %d', 
+                    str(self.analyzer.active_song.time[indices]), int(e.text()))
+        
+            self.plot('classification')
+            self.canvas.set_selection(())  
+                 
     def plot(self, plot_type):
+        """Show active song data on the plot
+        
+        This method relies on the state of the GUI checkboxes to know whether or
+        not a type of data should be shown or hidden.
+        
+        Inputs:
+            plot_type: string specifying which set of data to display
+        """
         t_step = self.params['time_downsample_disp']
         f_step = self.params['freq_downsample_disp']
         
         try:   
             time = self.analyzer.active_song.time[::t_step]
             freq = self.analyzer.active_song.freq[::f_step]
-            classification = self.analyzer.active_song.classifications[::t_step]
+            classification = self.analyzer.active_song.classification[::t_step]
             entropy = self.analyzer.active_song.entropy[::t_step]
             power = self.analyzer.active_song.power[::t_step]
             disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
@@ -308,28 +350,27 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             pass
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
-
-        
-    def keyPressEvent(self, e):
-        """Listens for a keypress
-        
-        If the keypress is a number and a region has been selected with the
-        select tool, the keypress will assign the value of that number to be
-        the classification of the selected region
-        """
-        if (e.text() in [str(i) for i in range(10)] and 
-                self.current_selection):
-            indices = np.searchsorted(self.analyzer.active_song.time, 
-                    np.asarray(self.current_selection))
-            
-            self.analyzer.active_song.classification[indices[0]:indices[1]] = int(e.text())
-            
-            self.logger.debug('Updating class from %s to be %d', 
-                    str(self.analyzer.active_song.time[indices]), int(e.text()))
-        
-            self.display_classification()
-            self.set_selection(())
     
+    def auto_classify(self, mode):
+        pass
+    
+    def find_motifs(self, mode):
+        pass
+       
+    def find_files(self, directory, pattern):
+        """Recursively walk a directory and return filenames matching pattern"""
+        
+        files_out = []
+        for root, _, files in os.walk(directory):
+            self.logger.debug('Looking in %s', str(root))
+            for basename in files:
+                self.logger.debug('Found basename %s', str(basename))
+                if fnmatch.fnmatch(basename, pattern):
+                    filename = os.path.join(root, basename)
+                    
+                    files_out.append(filename)
+                    
+        return files_out
     
         
 class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
