@@ -60,8 +60,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
-        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        sys.stdout = OutLog(self.console, sys.stdout)
+        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
@@ -104,9 +104,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 lambda: self.find_motifs('current'))
         
         
-        self.song_table.cellClicked.connect(
+        self.song_table.cellDoubleClicked.connect(
                 lambda r, c: self.table_clicked('songs', r))
-        self.motif_table.cellClicked.connect(
+        self.motif_table.cellDoubleClicked.connect(
                 lambda r, c: self.table_clicked('motifs', r))
 
         #Initialize the collection of assorted parameters
@@ -215,13 +215,16 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.warning('No table %s, cannot update', name)
             return
         
-        table.clearContents()
+        
+        #table.clearContents()
         
         for row,songfile in enumerate(data):
             if table.rowCount() == row:
                 table.insertRow(row)
                 
             for col, item in enumerate(self.create_table_row_items(songfile)):
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
+                
                 table.setItem(row, col, item)
             
     def create_table_row_items(self, sf):
@@ -363,6 +366,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         select tool, the keypress will assign the value of that number to be
         the classification of the selected region
         """
+        self.logger.info('Current selection is %s', str(self.canvas.current_selection))
+        
         if (e.text() in [str(i) for i in range(10)] and 
                 self.canvas.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time, 
@@ -370,7 +375,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
             self.analyzer.active_song.classification[indices[0]:indices[1]] = int(e.text())
             
-            self.logger.debug('Updating class from %s to be %d', 
+            self.logger.info('Updating class from %s to be %d', 
                     str(self.analyzer.active_song.time[indices]), int(e.text()))
         
             self.plot('classification')
@@ -1102,7 +1107,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 
         lastx, lasty, _, _, _ = self._xypress[0]
     
-        if self._button_pressed == 3:
+        if self._button_pressed == 3 and event.xdata is not None:
             self.set_marker.emit(event.xdata)
     
         elif self._button_pressed == 1:

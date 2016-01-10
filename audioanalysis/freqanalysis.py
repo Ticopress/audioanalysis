@@ -184,7 +184,9 @@ class AudioAnalyzer():
         self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(Sxx))
         self.logger.debug('STFT dimensions %s', str(Sxx.shape))               
 
-        sf.classification = np.zeros(time_list.size)
+        if sf.classification.size is 0:
+            sf.classification = np.zeros(time_list.size)
+            
         sf.time = time_list
         sf.freq = freq
         sf.entropy = self.calc_entropy(Sxx)
@@ -355,11 +357,11 @@ class SongFile:
         self.Fs = Fs
         
         #Post-processed values (does not include spectrogram)
-        self.time = None
-        self.freq = None
-        self.classification = None
-        self.entropy = None
-        self.power = None
+        self.time = np.ndarray(0)
+        self.freq = np.ndarray(0)
+        self.classification = np.ndarray(0)
+        self.entropy = np.ndarray(0)
+        self.power = np.ndarray(0)
         
         
         self.name = name
