@@ -35,6 +35,7 @@ import numpy as np
 
 from freqanalysis import AudioAnalyzer, SongFile
 from PyQt4.QtCore import pyqtSignal
+from _sqlite3 import Row
 
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
@@ -62,7 +63,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -72,9 +73,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         #Set up button callbacks
         self.play_button.clicked.connect(self.click_play_button)
-        self.entropy_checkbox.clicked.connect(lambda: self.plot('entropy'))
-        self.power_checkbox.clicked.connect(lambda: self.plot('power'))
-        self.classes_checkbox.clicked.connect(lambda: self.plot('classification'))
+        self.entropy_checkbox.clicked.connect(
+                lambda: self.plot('entropy'))
+        self.power_checkbox.clicked.connect(
+                lambda: self.plot('power'))
+        self.classes_checkbox.clicked.connect(
+                lambda: self.plot('classification'))
         
         #Set up menu callbacks
         self.action_load_files.triggered.connect(self.select_wav_files)
@@ -83,16 +87,28 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.action_new_nn.triggered.connect(self.create_new_neural_net)
         
-        self.action_save_all_motifs.triggered.connect(lambda: self.save_motifs('all'))
-        self.action_save_current_motif.triggered.connect(lambda: self.save_motifs('current'))
+        self.action_save_all_motifs.triggered.connect(
+                lambda: self.save_motifs('all'))
+        self.action_save_current_motif.triggered.connect(
+                lambda: self.save_motifs('current'))
         self.action_save_nn.triggered.connect(self.save_neural_net)
         
-        self.action_classify_all.triggered.connect(lambda: self.auto_classify('all'))
-        self.action_classify_current.triggered.connect(lambda: self.auto_classify('current'))
+        self.action_classify_all.triggered.connect(
+                lambda: self.auto_classify('all'))
+        self.action_classify_current.triggered.connect(
+                lambda: self.auto_classify('current'))
         
-        self.action_find_all_motifs.triggered.connect(lambda: self.find_motifs('all'))
-        self.action_find_current_motifs.triggered.connect(lambda: self.find_motifs('current'))
+        self.action_find_all_motifs.triggered.connect(
+                lambda: self.find_motifs('all'))
+        self.action_find_current_motifs.triggered.connect(
+                lambda: self.find_motifs('current'))
         
+        
+        self.song_table.cellClicked.connect(
+                lambda r, c: self.table_clicked('songs', r))
+        self.motif_table.cellClicked.connect(
+                lambda r, c: self.table_clicked('motifs', r))
+
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
@@ -143,6 +159,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Connect any slots coming from canvas here
         #-----slots-----
     
+    @QtCore.pyqtSlot()
     def select_wav_files(self):
         """Load one or more wav files as SongFiles"""
         self.logger.debug('Clicked the file select button')
@@ -153,7 +170,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.load_wav_files(file_names)
         else:
             self.logger.debug('Cancelled file select')
-            
+    
+    @QtCore.pyqtSlot()           
     def select_wav_folder(self):
         """Load all .wav files in a folder and all its subfolders as SongFiles"""
         
@@ -166,7 +184,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.load_wav_files(self.find_files(str(folder_name), '*.wav'))
         else:
             self.logger.debug('Cancelled file select')
-    
+
+    @QtCore.pyqtSlot()    
     def load_wav_files(self, file_names):
         """Load a list of wave files as SongFiles"""
         
@@ -184,16 +203,56 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.analyzer.songs.extend(new_songs)
             self.update_table('songs')
                     
-    
     def update_table(self, name):
         """Display information on loaded SongFiles in the table"""
         if name=='songs':
-            pass
+            data = self.analyzer.songs
+            table = self.song_table
         elif name=='motifs':
-            pass
+            data = self.analyzer.motifs
+            table = self.motif_table
         else:
             self.logger.warning('No table %s, cannot update', name)
+            return
+        
+        table.clearContents()
+        
+        for row,songfile in enumerate(data):
+            if table.rowCount() == row:
+                table.insertRow(row)
+                
+            for col, item in enumerate(self.create_table_row_items(songfile)):
+                table.setItem(row, col, item)
+            
+    def create_table_row_items(self, sf):
+        
+        namecol = QtGui.QTableWidgetItem(sf.name)
+
+        m, s = divmod(sf.start, 60)
+        h, m = divmod(m, 60) 
+        
+        startcol = QtGui.QTableWidgetItem("%02d:%02d:%05.3f" % (h, m, s))
+        
+        m, s = divmod(sf.length, 60)
+        h, m = divmod(m, 60) 
+        
+        lengthcol = QtGui.QTableWidgetItem("%02d:%02d:%05.3f" % (h, m, s))
+        
+        return [namecol, startcol, lengthcol]
     
+    @QtCore.pyqtSlot(str, int)
+    def table_clicked(self, table, row):
+        if table == 'motifs':
+            self.analyzer.set_active(self.analyzer.motifs[row])
+        elif table == 'songs':
+            self.analyzer.set_active(self.analyzer.songs[row])
+        else:
+            self.logger.warning('Unknown table %s clicked, cannot display song', table)
+            return
+        
+        self.show_active_song()
+    
+    @QtCore.pyqtSlot()      
     def select_neural_net_file(self):
         """Load one or more wav files as SongFiles"""
         self.logger.debug('Clicked the file select button')
@@ -204,17 +263,20 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.load_wav_files(file_names)
         else:
             self.logger.debug('Cancelled file select')
-            
+    
+    @QtCore.pyqtSlot()              
     def create_new_neural_net(self):
         """Uses the Analyzer's active_song to construct and train a neural net"""
         self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
         
         #then, train it
-        
+    
+    @QtCore.pyqtSlot()          
     def save_neural_net(self):
         """Save the analyzer's current neural net to a file to avoid training"""
         pass
-    
+
+    @QtCore.pyqtSlot()              
     def save_motifs(self, mode):
         if mode == 'all':
             #Get a folder, put them there
@@ -228,7 +290,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 self.analyzer.motifs[mode].export()
             except TypeError:
                 self.logger.error('Unknown motif export mode, cannot export')
-            
+
+    @QtCore.pyqtSlot()            
     def click_play_button(self):
         """Callback for clicking the GUI button"""
         try:
@@ -241,8 +304,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         except AttributeError:
             self.logger.error('Could not execute playback, no song prepared')
             self.play_button.setChecked(not self.play_button.isChecked())
-              
-        
+                     
     def start_playback(self):
         """Open and start a PyAudio stream
         
@@ -283,15 +345,13 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return (data, pyaudio.paContinue)    
     
-    def select_song(self):
+    def show_active_song(self):
         """Put all applicable data from the Model to the View
         
         This function assumes all preprocessing has been completed and merely
         looks at the state of the model and displays it
         """
-        
-        self.analyzer.set_active(self.analyzer.songs[0])
-        
+                
         for p in ['spectrogram', 'classification', 'entropy', 'power']:
             self.plot(p)
         
@@ -342,7 +402,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             return
         
         if plot_type == 'spectrogram':
-            pass
+            self.canvas.display_spectrogram(time, freq, disp_Sxx)
         elif plot_type == 'classification':
             pass
         elif plot_type == 'entropy':
@@ -351,10 +411,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             pass
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
-    
+
+    @QtCore.pyqtSlot(str)    
     def auto_classify(self, mode):
         pass
-    
+
+    @QtCore.pyqtSlot(str)    
     def find_motifs(self, mode):
         pass
        
@@ -531,6 +593,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         values from the last GUI value is significant
         """
         
+        self.logger.debug('Setting marker to %0.4f', marker)
         self.marker = marker
         t = time.time()
         
@@ -553,7 +616,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         """Add one axis to this plot, and associate it with name"""
         
         if not self.axis_dict:
-            self.axis_dict[name] = self.canvas.figure.add_subplot(111)
+            self.axis_dict[name] = self.figure.add_subplot(111)
             self.axis_names.append(name)
         else:
             self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
@@ -621,7 +684,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             return (max(xlims[0], self.extent[0]), min(xlims[1], self.extent[1]))
          
             
-    def display_spectrogram(self, t, f, Sxx):
+    def display_spectrogram(self, t, f, Sxx, **params):
         """Fetches spectrogram data from analyzer and plots it
         
         NO display method affects the domain in any way.  That must be done
@@ -633,6 +696,18 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         except KeyError:
             self.add_axis('spectrogram') 
             ax = self.axis_dict['spectrogram']
+            
+        try:
+            vmin = params['vmin']
+        except KeyError:
+            self.logger.warning('No parameter "vmin", using data minimum')
+            vmin = np.min(Sxx)
+            
+        try:
+            vmax = params['vmax']
+        except KeyError:
+            self.logger.warning('No parameter "vmax", using data maximum')
+            vmax = np.max(Sxx)
         
         halfbin_time = (t[1] - t[0]) / 2.0
         halfbin_freq = (f[1] - f[0]) / 2.0
@@ -646,8 +721,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
                 interpolation="nearest", 
                 extent=self.extent,
                 cmap='gray_r',
-                vmin=self.params['vmin'],
-                vmax=self.params['vmax']
+                vmin=vmin,
+                vmax=vmax
                 )
         
         ax.axis('tight')
@@ -733,8 +808,12 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     buttons are removed, and a 'select' button has been added which is used for 
     manual classification of data.
     
-    Emits a signal 'navigate' which is called any time an action is take which
-    would change the plot bounds.
+    Signals:
+        'navigate': called any time an action is take which would change the 
+            canvas x_lims or y_lims (bounds).
+        'set_marker': called in select mode to move the song marker
+        'set_selection': called in select mode to set a selection and also to 
+            cancel a selection when necessary
     """
     
     #List of signals for emitted by this class
@@ -815,8 +894,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 
 
     def forward(self, *args):
-        """OVERRIDE the foward function in backend_bases.NavigationToolbar2
+        """Button callback for clicking the forward button
         
+        OVERRIDE the foward function in backend_bases.NavigationToolbar2
         Emits a signal causing the SpectrogramCanvas to scroll right
         """
         
@@ -826,8 +906,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.navigate.emit({'type':'forward'})
      
     def back(self, *args):
-        """OVERRIDE the back function in backend_bases.NavigationToolbar2
+        """Button callback for clicking the back button
         
+        OVERRIDE the back function in backend_bases.NavigationToolbar2
         Emits a signal causing the SpectrogramCanvas to scroll left
         """
         self.logger.debug('Clicked the back button')
@@ -836,7 +917,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.navigate.emit({'type':'back'})
      
     def home(self, *args):
-        """Override the home method of backend_bases.NavigationToolbar2"""
+        """Button callback for clicking the home button
+        
+        Override the home method of backend_bases.NavigationToolbar2"""
         self.navigate.emit({'type':'home'})
             
     def drag_pan(self, event):
@@ -862,10 +945,13 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             self.navigate.emit(drag_data)
             
     def pan(self, *args):
+        """Button callback for clicking the pan button"""
         self.set_selection.emit(())
         super(SpectrogramNavBar, self).pan(*args)
         
     def zoom(self, *args):
+        """Button callback for clicking the zoom button"""
+
         self.set_selection.emit(())
         super(SpectrogramNavBar, self).zoom(*args)
         
@@ -911,16 +997,14 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.release(event) 
             
     def _update_buttons_checked(self):
-        # sync button checkstates to match active mode
+        """sync button checkstates to match active mode"""
         super(SpectrogramNavBar, self)._update_buttons_checked()
         self._actions['select'].setChecked(self._active == 'SELECT')
     
     def select(self, *args):
-        self.logger.debug('Clicked the select button on the toolbar')
-        
         """Activate the select tool. select with left button, set cursor with right"""
-        # set the pointer icon and button press funcs to the
-        # appropriate callbacks
+
+        self.logger.debug('Clicked the select button on the toolbar')
 
         if self._active == 'SELECT':
             self._active = None
@@ -943,9 +1027,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             self.canvas.widgetlock(self)
         else:
             self.canvas.widgetlock.release(self)
-
-        #for a in self.canvas.figure.get_axes():
-        #    a.set_navigate_mode(self._active)
 
         self.set_message(self.mode)
         
@@ -997,6 +1078,8 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.press(event)
     
     def release_select(self, event):
+        """Release mouse callback when select button is checked"""
+        
         self.logger.debug('Released mouse in select mode')
         
         self.canvas.mpl_disconnect(self._idSelect)
@@ -1033,6 +1116,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.release(event)
     
     def drag_select(self, event):
+        """drag mouse callback when select function is active"""
         
         if self._button_pressed == 3:
             self.set_marker.emit(event.xdata)

@@ -116,6 +116,7 @@ class AudioAnalyzer():
         try:
             idx = self.songs.index(sf)
         except IndexError:
+            self.logger.info('Songfile %s added to list', sf.name)
             idx = len(self.songs)
             self.songs.append(sf)
         
@@ -368,7 +369,7 @@ class SongFile:
         
         
         self.start = 0
-        self.end = len(data)/Fs
+        self.length = len(data)/Fs
      
     @property
     def domain(self):
@@ -424,11 +425,12 @@ class SongFile:
         sfs = []
         
         for i in range(0, split_count):
-            next_sf = cls(filename, data[i*nperfile:(i+1)*nperfile], fs)
+            songdata = data[i*nperfile:(i+1)*nperfile]
+            next_sf = cls(filename, songdata, fs)
             
             #override the start/end markers - made from a split file            
             next_sf.start = int(i*nperfile/fs)
-            next_sf.end = int((i+1)*nperfile/fs)
+            next_sf.length = next_sf.start+songdata.shape[0]/fs
             
             sfs.append(next_sf)
             
@@ -477,4 +479,4 @@ class SongMotif(SongFile):
         self.Sxx = Sxx
         
         self.start = min(time)
-        self.end = max(time)
+        self.length = max(time)-self.start

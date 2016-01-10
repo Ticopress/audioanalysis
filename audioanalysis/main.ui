@@ -40,7 +40,7 @@
            <enum>QTabWidget::Rounded</enum>
           </property>
           <property name="currentIndex">
-           <number>1</number>
+           <number>0</number>
           </property>
           <property name="usesScrollButtons">
            <bool>false</bool>
@@ -60,7 +60,7 @@
              <number>0</number>
             </property>
             <item>
-             <widget class="QTableWidget" name="songfile_table">
+             <widget class="QTableWidget" name="song_table">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
                 <horstretch>0</horstretch>
@@ -69,6 +69,15 @@
               </property>
               <property name="toolTip">
                <string>List of loaded song files</string>
+              </property>
+              <property name="alternatingRowColors">
+               <bool>true</bool>
+              </property>
+              <property name="selectionMode">
+               <enum>QAbstractItemView::SingleSelection</enum>
+              </property>
+              <property name="selectionBehavior">
+               <enum>QAbstractItemView::SelectRows</enum>
               </property>
               <column>
                <property name="text">
@@ -107,6 +116,15 @@
              <widget class="QTableWidget" name="motif_table">
               <property name="toolTip">
                <string>List of discovered motifs</string>
+              </property>
+              <property name="alternatingRowColors">
+               <bool>true</bool>
+              </property>
+              <property name="selectionMode">
+               <enum>QAbstractItemView::SingleSelection</enum>
+              </property>
+              <property name="selectionBehavior">
+               <enum>QAbstractItemView::SelectRows</enum>
               </property>
               <column>
                <property name="text">
