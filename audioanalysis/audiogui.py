@@ -60,8 +60,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        sys.stdout = OutLog(self.console, sys.stdout)
-        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        #sys.stdout = OutLog(self.console, sys.stdout)
+        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
@@ -456,9 +456,14 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
     def __init__(self, figure_):
         self.logger = logging.getLogger('SpectrogramCanvas.logger')
         
-        FigureCanvas.__init__(self, figure_)
-        QtCore.QObject.__init__(self)
-        
+        #So, multiple inheritance is fun
+        #This works if it goes QObject, FigureCanvas
+        #Breaks if it goes FigureCanvas, QObject - and in weird ways too
+        #Using super seeeeeems not broken?  We hope
+        #QtCore.QObject.__init__(self)
+        #FigureCanvas.__init__(self, figure_)
+        super(SpectrogramCanvas, self).__init__(figure_)
+
         #Extent of the spectrogram data, for homing and as domain bound
         self.extent = ()
         #Dictionary mapping str->axis object
@@ -534,7 +539,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             ax._set_view_from_bbox(tup, direction, mode, False, False)   
             
             if direction=='out' and not self.valid(ax.get_xlim()):
-                self.set_domain(ax.get_xlim())
+                self.set_domain(self.extent[0:2])
                    
         elif navtype == 'forward':
             #Get any plot, read the plot domain, move left by 25% of domain
@@ -552,7 +557,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
                     
                 new_bounds = (xbounds[0]+dx, xbounds[1]+dx)
                 
-                self.set_domain(new_bounds)  
+                self.set_domain(self.validate(new_bounds))  
                   
         elif navtype == 'back':
             #Get any plot, read the plot domain, move left by 25% of domain
@@ -570,7 +575,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
                     
                 new_bounds = (xbounds[0]-dx, xbounds[1]-dx)
                 
-                self.set_domain(new_bounds)  
+                self.set_domain(self.validate(new_bounds))  
                       
         elif navtype == 'home':
             self.set_domain(self.extent[0:2])
@@ -1143,7 +1148,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     def _set_cursor(self, event):
         """OVERRIDE the _set_cursor method in backend_bases.NavigationToolbar2"""
          
-        self.logger.info('Calling set_cursor with active %s', self._active) 
+        #self.logger.info('Calling set_cursor with active %s', self._active) 
          
         if not event.inaxes or not self._active:
             if self._lastCursor != cursors.POINTER:

@@ -158,7 +158,7 @@
         </layout>
        </widget>
       </widget>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_4">
         <item>
          <spacer name="verticalSpacer">
@@ -252,6 +252,9 @@
            <widget class="QCheckBox" name="classes_checkbox">
             <property name="text">
              <string>Classifications</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
             </property>
            </widget>
           </item>
