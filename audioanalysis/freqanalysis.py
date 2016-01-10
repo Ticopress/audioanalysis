@@ -23,15 +23,12 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 from scipy import signal
 from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
 import numpy as np
-import logging, sys, time
+import logging, sys, time, os
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
 from keras.models import Sequential
-from __builtin__ import file
-from sympy.mpmath import limit
-from sqlite3.dbapi2 import Time
-from compiler.ast import Power
+
 
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
@@ -426,7 +423,7 @@ class SongFile:
         
         for i in range(0, split_count):
             songdata = data[i*nperfile:(i+1)*nperfile]
-            next_sf = cls(filename, songdata, fs)
+            next_sf = cls(os.path.basename(filename), songdata, fs)
             
             #override the start/end markers - made from a split file            
             next_sf.start = int(i*nperfile/fs)

@@ -60,10 +60,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
-        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        sys.stdout = OutLog(self.console, sys.stdout)
+        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -73,11 +73,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         #Set up button callbacks
         self.play_button.clicked.connect(self.click_play_button)
-        self.entropy_checkbox.clicked.connect(
+        self.entropy_checkbox.stateChanged.connect(
                 lambda: self.plot('entropy'))
-        self.power_checkbox.clicked.connect(
+        self.power_checkbox.stateChanged.connect(
                 lambda: self.plot('power'))
-        self.classes_checkbox.clicked.connect(
+        self.classes_checkbox.stateChanged.connect(
                 lambda: self.plot('classification'))
         
         #Set up menu callbacks
@@ -229,14 +229,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         namecol = QtGui.QTableWidgetItem(sf.name)
 
         m, s = divmod(sf.start, 60)
-        h, m = divmod(m, 60) 
         
-        startcol = QtGui.QTableWidgetItem("%02d:%02d:%05.3f" % (h, m, s))
+        startcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
         
         m, s = divmod(sf.length, 60)
-        h, m = divmod(m, 60) 
         
-        lengthcol = QtGui.QTableWidgetItem("%02d:%02d:%05.3f" % (h, m, s))
+        lengthcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
         
         return [namecol, startcol, lengthcol]
     
@@ -377,7 +375,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
             self.plot('classification')
             self.canvas.set_selection(())  
-                 
+    
+    @QtCore.pyqtSlot(str)             
     def plot(self, plot_type):
         """Show active song data on the plot
         
@@ -387,9 +386,18 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         Inputs:
             plot_type: string specifying which set of data to display
         """
-        t_step = self.params['time_downsample_disp']
-        f_step = self.params['freq_downsample_disp']
-        
+        try:
+            t_step = self.params['time_downsample_disp']
+        except KeyError:
+            self.logger.warning('Missing time domain display downsampling ratio')
+            t_step = 1
+            
+        try:
+            f_step = self.params['freq_downsample_disp']
+        except KeyError:
+            self.logger.warning('Missing frequency domain display downsampling ratio')
+            f_step = 1
+            
         try:   
             time = self.analyzer.active_song.time[::t_step]
             freq = self.analyzer.active_song.freq[::f_step]
@@ -402,13 +410,16 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             return
         
         if plot_type == 'spectrogram':
-            self.canvas.display_spectrogram(time, freq, disp_Sxx)
+            self.canvas.display_spectrogram(time, freq, disp_Sxx, **self.params)
         elif plot_type == 'classification':
-            pass
+            show = self.classes_checkbox.isChecked()
+            self.canvas.display_classification(time, classification, show=show)
         elif plot_type == 'entropy':
-            pass
+            show = self.entropy_checkbox.isChecked()
+            self.canvas.display_entropy(time, entropy, show=show)
         elif plot_type == 'power':
-            pass
+            show = self.power_checkbox.isChecked()
+            self.canvas.display_power(time, power, show=show)
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
 
@@ -421,19 +432,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         pass
        
     def find_files(self, directory, pattern):
-        """Recursively walk a directory and return filenames matching pattern"""
+        """Return filenames matching pattern in directory"""
         
-        files_out = []
-        for root, _, files in os.walk(directory):
-            self.logger.debug('Looking in %s', str(root))
-            for basename in files:
-                self.logger.debug('Found basename %s', str(basename))
-                if fnmatch.fnmatch(basename, pattern):
-                    filename = os.path.join(root, basename)
-                    
-                    files_out.append(filename)
-                    
-        return files_out
+        return [os.path.join(directory, fname) 
+                for fname in os.listdir(directory) 
+                if fnmatch.fnmatch(os.path.basename(fname), pattern)]
+        
     
         
 class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
@@ -541,7 +545,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             else:
                 xbounds = ax.get_xlim()
                 width = xbounds[1] - xbounds[0]
-                if xbounds[1]+0.25*width <= self.extent[1]:
+                if xbounds[1]+0.25*width < self.extent[1]:
                     dx = 0.25*width
                 else:
                     dx = self.extent[1] - xbounds[1]
@@ -559,7 +563,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             else:
                 xbounds = ax.get_xlim()
                 width = xbounds[1] - xbounds[0]
-                if xbounds[0]-0.25*width >= self.extent[0]:
+                if xbounds[0]-0.25*width > self.extent[0]:
                     dx = 0.25*width
                 else:
                     dx = xbounds[0] - self.extent[0]
@@ -607,7 +611,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             if ax.lines:
                 ax.lines.remove(ax.lines[0])
             
-            ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
+            ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2, 
+                    scalex=False, scaley=False)
             self.set_range('marker', (0,1))
             self.draw_idle()
             self.last_gui_refresh_time = t
@@ -748,13 +753,13 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         if ax.lines:
             ax.lines.remove(ax.lines[0])
             
-        l, = ax.plot(t, classes, 'b-')
+        l, = ax.plot(t, classes, 'b-', scalex=False, scaley=False)
         
         self.set_range('classification', (0, max(classes)+1))
         
         l.set_visible(show)
 
-        self.canvas.draw_idle() 
+        self.draw_idle() 
         
         
     def display_entropy(self, t, entropy, show=True):
@@ -769,7 +774,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         if ax.lines:
             ax.lines.remove(ax.lines[0])
             
-        l, = ax.plot(t, entropy, 'g-')
+        l, = ax.plot(t, entropy, 'g-', scalex=False, scaley=False)
            
         self.set_range('entropy', (min(entropy), max(entropy)))
 
@@ -787,7 +792,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         if ax.lines:
             ax.lines.remove(ax.lines[0])
             
-        l, = ax.plot(t, power, 'r-')
+        l, = ax.plot(t, power, 'r-', scalex=False, scaley=False)
 
         self.set_range('power', (min(power), max(power)))
         
@@ -818,7 +823,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     
     #List of signals for emitted by this class
     navigate = pyqtSignal(dict)
-    set_marker = pyqtSignal(int)
+    set_marker = pyqtSignal(float)
     set_selection = pyqtSignal(tuple)
     
     def __init__(self, canvas_, parent_, *args, **kwargs):  
@@ -969,24 +974,26 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 
         self.remove_rubberband()
         
-        for cur_press in self._xypress:
-            x, y = event.x, event.y
-            lastx, lasty, ax, _, _ = cur_press
-            
-            if abs(x - lastx) < 5 and abs(y - lasty) < 5:
-                self._xypress = None
-                self.release(event)
-                continue
+        if not self._xypress:
+            return
 
-            data = {
-                    'type':'release_zoom',
-                    'axis':ax,
-                    'key':self._button_pressed,
-                    'zoom_tuple':(lastx, lasty, x, y),
-                    'mode':self._zoom_mode
-                    }
-            
-            self.navigate.emit(data)
+        x, y = event.x, event.y
+        lastx, lasty, ax, _, _ = self._xypress[0]
+        
+        if abs(x - lastx) < 5 and abs(y - lasty) < 5:
+            self._xypress = None
+            self.release(event)
+            return
+
+        data = {
+                'type':'release_zoom',
+                'axis':ax,
+                'key':self._button_pressed,
+                'zoom_tuple':(lastx, lasty, x, y),
+                'mode':self._zoom_mode
+                }
+        
+        self.navigate.emit(data)
         
         self._xypress = None
         self._button_pressed = None
@@ -1135,7 +1142,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         
     def _set_cursor(self, event):
         """OVERRIDE the _set_cursor method in backend_bases.NavigationToolbar2"""
-        
+         
+        self.logger.info('Calling set_cursor with active %s', self._active) 
+         
         if not event.inaxes or not self._active:
             if self._lastCursor != cursors.POINTER:
                 self.set_cursor(cursors.POINTER)
@@ -1148,11 +1157,12 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             elif (self._active == 'PAN' and
                   self._lastCursor != cursors.MOVE):
                 self.set_cursor(cursors.MOVE)
-
                 self._lastCursor = cursors.MOVE   
             elif (self._active == 'SELECT' and
                     self._lastCursor != cursors.SELECT_REGION):
                 self.set_cursor(cursors.SELECT_REGION)
+                self._lastCursor = cursors.SELECT_REGION
+
     
 class OutLog:
     '''OutLog pipes output from a stream to a QTextEdit widget
