@@ -20,7 +20,6 @@ You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
 
-from freqanalysis import AudioAnalyzer, SongFile
 from PyQt4.uic import loadUiType
 
 from matplotlib.figure import Figure
@@ -31,20 +30,23 @@ from matplotlib.backend_bases import cursors
 
 from PyQt4 import QtGui, QtCore
 
-import logging, sys, os, pyaudio, time
+import logging, sys, os, pyaudio, time, fnmatch
 import numpy as np
+
+from freqanalysis import AudioAnalyzer, SongFile
+from PyQt4.QtCore import pyqtSignal
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
 class AudioGUI(Ui_MainWindow, QMainWindow):
-    """AudioGUI docstring goes here TODO
+    """The GUI for automatically identifying motifs
     
     
     """
     
 
-    def __init__(self,):
-        """Initialization docstring goes here TODO
+    def __init__(self):
+        """Create a new AudioGUI
         
         
         """
@@ -52,37 +54,61 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         super(AudioGUI, self).__init__()
         self.setupUi(self)
         
+        self.raise_()
+        self.activateWindow()
         #Initialize logging
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
-        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        sys.stdout = OutLog(self.console, sys.stdout)
+        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
         # Initialize the basic plot area
-        self.fig = Figure()
-        self.canvas = FigureCanvas(self.fig)
-        self.plot_vl.addWidget(self.canvas)
-        
-        self.toolbar = SpectrogramNavBar(self.canvas, self.plot_container)
-        self.plot_vl.addWidget(self.toolbar)
+        canvas = SpectrogramCanvas(Figure())
+        toolbar = SpectrogramNavBar(canvas, self)
+
+        self.set_canvas(canvas, self.plot_vl)
         
         #Set up button callbacks
-        self.open_file.clicked.connect(self.file_open_dialog)
         self.play_button.clicked.connect(self.click_play_button)
-        self.entropy_checkbox.clicked.connect(self.display_entropy, self.entropy_checkbox.isChecked())
-        self.power_checkbox.clicked.connect(self.display_power, self.power_checkbox.isChecked())
-        self.confirm.clicked.connect(self.click_confirm_button)
+        self.entropy_checkbox.stateChanged.connect(
+                lambda: self.plot('entropy'))
+        self.power_checkbox.stateChanged.connect(
+                lambda: self.plot('power'))
+        self.classes_checkbox.stateChanged.connect(
+                lambda: self.plot('classification'))
         
-        #Set up SpectrogramNavBar signal callbacks
-        self.last_gui_refresh_time = time.time()
-        self.marker = 0
-        self.current_selection = ()
-        self.connect(self.toolbar, QtCore.SIGNAL("set_marker"), self.set_marker)
-        self.connect(self.toolbar, QtCore.SIGNAL("set_selection"), self.set_selection)
+        #Set up menu callbacks
+        self.action_load_files.triggered.connect(self.select_wav_files)
+        self.action_load_folder.triggered.connect(self.select_wav_folder)
+        self.action_load_nn.triggered.connect(self.select_neural_net_file)
         
+        self.action_new_nn.triggered.connect(self.create_new_neural_net)
+        
+        self.action_save_all_motifs.triggered.connect(
+                lambda: self.save_motifs('all'))
+        self.action_save_current_motif.triggered.connect(
+                lambda: self.save_motifs('current'))
+        self.action_save_nn.triggered.connect(self.save_neural_net)
+        
+        self.action_classify_all.triggered.connect(
+                lambda: self.auto_classify('all'))
+        self.action_classify_current.triggered.connect(
+                lambda: self.auto_classify('current'))
+        
+        self.action_find_all_motifs.triggered.connect(
+                lambda: self.find_motifs('all'))
+        self.action_find_current_motifs.triggered.connect(
+                lambda: self.find_motifs('current'))
+        
+        
+        self.song_table.cellDoubleClicked.connect(
+                lambda r, c: self.table_clicked('songs', r))
+        self.motif_table.cellDoubleClicked.connect(
+                lambda r, c: self.table_clicked('motifs', r))
+
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
@@ -115,40 +141,161 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.logger.info('Finished with initialization')
     
-    def file_open_dialog(self):
-        """Provide a standard file open dialog to import .wav data into the 
-        model classes"""  
+    
+    def set_canvas(self, canvas, loc):
+        """Set the SpectrogramCanvas for this GUI
+        
+        Assigns the given canvas to be this GUI's canvas, connects any
+        relevant slots, and places the canvas and its tools into the loc 
+        container
+        """
+        loc.addWidget(canvas)
+        
+        for t in canvas.tools.values():
+            loc.addWidget(t)
+            
+        self.canvas = canvas
+        
+        #Connect any slots coming from canvas here
+        #-----slots-----
+    
+    @QtCore.pyqtSlot()
+    def select_wav_files(self):
+        """Load one or more wav files as SongFiles"""
         self.logger.debug('Clicked the file select button')
-        
-        if self.play_button.isChecked():
-            self.play_button.click()
               
-        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Open file', 
-                '/home', 'WAV files (*.wav)')
-        
-        if file_name:
-            self.logger.debug('Selected the file %s', str(file_name))
-
-            self.file_name.setText(file_name)
-            
-            new_songs = SongFile.load(
-                            str(file_name),
-                            downsampling=self.params['load_downsampling']
-                            )
-            
-            self.logger.info('Loaded %s as %d SongFiles', str(file_name), 
-                    len(new_songs))
-            
-            self.analyzer.songs.extend(new_songs)
-            
-            self.analyzer.set_active(new_songs[0])
-            
-            self.show_data()
-
+        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Select file(s)', 
+                '', 'WAV files (*.wav)')
+        if file_names:
+            self.load_wav_files(file_names)
         else:
             self.logger.debug('Cancelled file select')
     
+    @QtCore.pyqtSlot()           
+    def select_wav_folder(self):
+        """Load all .wav files in a folder and all its subfolders as SongFiles"""
+        
+        self.logger.debug('Clicked the folder select button')
+              
+        folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
+        self.logger.info('selected %s', str(folder_name))
+        if folder_name:
+            pass
+            self.load_wav_files(self.find_files(str(folder_name), '*.wav'))
+        else:
+            self.logger.debug('Cancelled file select')
+
+    @QtCore.pyqtSlot()    
+    def load_wav_files(self, file_names):
+        """Load a list of wave files as SongFiles"""
+        
+        for f in file_names:
+            self.logger.debug('Loading the file %s', str(f))
+            
+            new_songs = SongFile.load(
+                            str(f),
+                            downsampling=self.params['load_downsampling']
+                            )
+            
+            self.logger.info('Loaded %s as %d SongFiles', str(f), 
+                    len(new_songs))
+            
+            self.analyzer.songs.extend(new_songs)
+            self.update_table('songs')
+                    
+    def update_table(self, name):
+        """Display information on loaded SongFiles in the table"""
+        if name=='songs':
+            data = self.analyzer.songs
+            table = self.song_table
+        elif name=='motifs':
+            data = self.analyzer.motifs
+            table = self.motif_table
+        else:
+            self.logger.warning('No table %s, cannot update', name)
+            return
+                
+        for row,songfile in enumerate(data):
+            if table.rowCount() == row:
+                table.insertRow(row)
+                
+            for col, item in enumerate(self.create_table_row_items(songfile)):
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
+                
+                table.setItem(row, col, item)
+            
+    def create_table_row_items(self, sf):
+        
+        namecol = QtGui.QTableWidgetItem(sf.name)
+
+        m, s = divmod(sf.start, 60)
+        
+        startcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        
+        m, s = divmod(sf.length, 60)
+        
+        lengthcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        
+        return [namecol, startcol, lengthcol]
+    
+    @QtCore.pyqtSlot(str, int)
+    def table_clicked(self, table, row):
+        if table == 'motifs':
+            self.analyzer.set_active(self.analyzer.motifs[row])
+        elif table == 'songs':
+            self.analyzer.set_active(self.analyzer.songs[row])
+        else:
+            self.logger.warning('Unknown table %s clicked, cannot display song', table)
+            return
+        
+        self.show_active_song()
+    
+    @QtCore.pyqtSlot()      
+    def select_neural_net_file(self):
+        """Load one or more wav files as SongFiles"""
+        self.logger.debug('Clicked the file select button')
+              
+        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', 
+                '/home', 'Neural Net files (*.nn)')
+        if file_names:
+            self.load_wav_files(file_names)
+        else:
+            self.logger.debug('Cancelled file select')
+    
+    @QtCore.pyqtSlot()              
+    def create_new_neural_net(self):
+        """Uses the Analyzer's active_song to construct and train a neural net"""
+        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
+        
+        #then, train it
+    
+    @QtCore.pyqtSlot()          
+    def save_neural_net(self):
+        """Save the analyzer's current neural net to a file to avoid training"""
+        pass
+
+    @QtCore.pyqtSlot()              
+    def save_motifs(self, mode):
+        if mode == 'all':
+            folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
+            
+            for mf in self.analyzer.motifs:
+                mf.export(destination=folder_name)
+            
+        elif mode == 'current':
+            folder_name = QtGui.QFileDialog.getSaveFileName(self, 'Enter motif file name')
+            
+            
+        else:
+            #Get a filename, put it there
+            try:
+                self.analyzer.motifs[mode].export()
+            except TypeError:
+                self.logger.error('Unknown motif export mode, cannot export')
+
+    @QtCore.pyqtSlot()            
     def click_play_button(self):
+        """Callback for clicking the GUI button"""
         try:
             if self.play_button.isChecked():
                 self.start_playback()
@@ -159,8 +306,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         except AttributeError:
             self.logger.error('Could not execute playback, no song prepared')
             self.play_button.setChecked(not self.play_button.isChecked())
-              
-        
+                     
     def start_playback(self):
         """Open and start a PyAudio stream
         
@@ -187,165 +333,32 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.stream.close()
 
     def play_audio_callback(self, in_data, frame_count, time_info, status):
-        index = int(self.marker * self.analyzer.active_song.Fs)
+        """Callback for separate thread that plays audio
+        
+        This is responsible for moving the marker on the canvas, and since the
+        stream auto-dies when it reaches the end of the data, no handling is
+        needed to make sure the marker stops moving
+        """
+        
+        index = int(self.canvas.marker * self.analyzer.active_song.Fs)
         data = self.analyzer.active_song.data[index:index+frame_count]
         
-        self.set_marker((index+frame_count)/self.analyzer.active_song.Fs)
+        self.canvas.set_marker((index+frame_count)/self.analyzer.active_song.Fs)
         
         return (data, pyaudio.paContinue)    
     
-    def click_confirm_button(self):
-        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
-        self.logger.info('Neural network generated')
-    def show_data(self):
+    def show_active_song(self):
         """Put all applicable data from the Model to the View
         
         This function assumes all preprocessing has been completed and merely
         looks at the state of the model and displays it
         """
-        self.display_spectrogram()
-
-        self.display_classification()
+                
+        for p in ['spectrogram', 'classification', 'entropy', 'power']:
+            self.plot(p)
         
-        self.display_entropy(show=self.entropy_checkbox.isChecked())
-        
-        self.display_power(show=self.power_checkbox.isChecked())
-        
-        self.set_marker(0)
-        self.set_selection(())
-        
-        self.toolbar.x_constraint = self.analyzer.active_song.domain       
-        self.toolbar.set_domain(self.analyzer.active_song.domain)
-
-    def display_spectrogram(self):
-        """Fetches spectrogram data from analyzer and plots it
-        
-        NO display method affects the domain in any way.  That must be done
-        external to the display method
-        """   
-                              
-        t_step = self.params['time_downsample_disp']
-        f_step = self.params['freq_downsample_disp']
-        
-        try:   
-            time = self.analyzer.active_song.time[::t_step]
-            freq = self.analyzer.active_song.freq[::f_step]
-        except AttributeError:
-            self.logger.error('No active song, cannot display spectrogram')
-            return
-            
-        try: 
-            disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
-        except AttributeError:
-            self.logger.error('No calculated spectrogram, cannot display')
-            return
-          
-        try:
-            ax = self.toolbar.axis_dict['spectrogram']
-        except KeyError:
-            self.toolbar.add_axis('spectrogram') 
-            ax = self.toolbar.axis_dict['spectrogram']
-        
-        halfbin_time = (time[1] - time[0]) / 2.0
-        halfbin_freq = (freq[1] - freq[0]) / 2.0
-        
-        # this method is much much faster!
-        # center bin
-        extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
-                  freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
-        
-        self.toolbar.image = ax.imshow(disp_Sxx, 
-                interpolation="nearest", 
-                extent=extent,
-                cmap='gray_r',
-                vmin=self.params['vmin'],
-                vmax=self.params['vmax']
-                )
-        
-        ax.axis('tight')
-  
-        self.toolbar.set_range('spectrogram', self.analyzer.active_song.range)        
-        self.canvas.draw_idle()
-    
-    def display_classification(self):
-        """Fetches classification data from analyzer and plots it
-        
-        NO display method affects the domain in any way.  That must be done
-        external to the display method
-        """
-        try:
-            classes = self.analyzer.active_song.classification
-            time = self.analyzer.active_song.time
-        except AttributeError:
-            self.logger.error('No active song to display')
-            return
-        
-        try:
-            ax = self.toolbar.axis_dict['classification']
-        except KeyError:
-            self.toolbar.add_axis('classification')
-            ax = self.toolbar.axis_dict['classification']
-        
-        if ax.lines:
-            ax.lines.remove(ax.lines[0])
-            
-        ax.plot(time, classes, 'b-')
-        
-        self.toolbar.set_range('classification', (0, max(classes)+1))
-
-        self.canvas.draw_idle()
-        
-    def display_entropy(self, show=True):
-        try:
-            entropy = self.analyzer.active_song.entropy
-            time = self.analyzer.active_song.time
-        except AttributeError:
-            self.logger.warning('No active song to display')
-            return
-         
-        try:
-            ax = self.toolbar.axis_dict['entropy']
-        except KeyError:
-            self.toolbar.add_axis('entropy')
-            ax = self.toolbar.axis_dict['entropy']
-             
-        
-        if ax.lines:
-            ax.lines.remove(ax.lines[0])
-            
-        l, = ax.plot(time, entropy, 'g-')
-           
-        self.toolbar.set_range('entropy', (min(entropy), max(entropy)))
-
-        l.set_visible(show)
-
-        self.canvas.draw_idle()
-    
-    def display_power(self, show=True):
-        try:
-            ax = self.toolbar.axis_dict['power']
-        except KeyError:
-            self.toolbar.add_axis('power')
-            ax = self.toolbar.axis_dict['power']
-
-        try:
-            power = self.analyzer.active_song.power
-            time = self.analyzer.active_song.time
-        except AttributeError:
-            self.logger.error('No active song to display')
-            return
-        
-        if ax.lines:
-            ax.lines.remove(ax.lines[0])
-            
-        l, = ax.plot(time, power, 'r-')
-
-        self.toolbar.set_range('power', (min(power), max(power)))
-        
-        l.set_visible(show)
-        
-        self.canvas.draw_idle()
-
+        self.canvas.set_marker(0)
+        self.canvas.set_selection(())
         
     def keyPressEvent(self, e):
         """Listens for a keypress
@@ -354,95 +367,480 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         select tool, the keypress will assign the value of that number to be
         the classification of the selected region
         """
+                
         if (e.text() in [str(i) for i in range(10)] and 
-                self.current_selection):
+                self.canvas.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time, 
-                    np.asarray(self.current_selection))
+                    np.asarray(self.canvas.current_selection))
             
             self.analyzer.active_song.classification[indices[0]:indices[1]] = int(e.text())
-            
-            self.logger.debug('Updating class from %s to be %d', 
-                    str(self.analyzer.active_song.time[indices]), int(e.text()))
         
-            self.display_classification()
-            self.set_selection(())
+            self.plot('classification')
+            self.canvas.set_selection(())  
     
+    @QtCore.pyqtSlot(str)             
+    def plot(self, plot_type):
+        """Show active song data on the plot
+        
+        This method relies on the state of the GUI checkboxes to know whether or
+        not a type of data should be shown or hidden.
+        
+        Inputs:
+            plot_type: string specifying which set of data to display
+        """
+        try:
+            t_step = self.params['time_downsample_disp']
+        except KeyError:
+            self.logger.warning('Missing time domain display downsampling ratio')
+            t_step = 1
+            
+        try:
+            f_step = self.params['freq_downsample_disp']
+        except KeyError:
+            self.logger.warning('Missing frequency domain display downsampling ratio')
+            f_step = 1
+            
+        try:   
+            time = self.analyzer.active_song.time[::t_step]
+            freq = self.analyzer.active_song.freq[::f_step]
+            classification = self.analyzer.active_song.classification[::t_step]
+            entropy = self.analyzer.active_song.entropy[::t_step]
+            power = self.analyzer.active_song.power[::t_step]
+            disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
+        except AttributeError:
+            self.logger.warning('No active song, cannot display plot %s', plot_type)
+            return
+        
+        if plot_type == 'spectrogram':
+            self.canvas.display_spectrogram(time, freq, disp_Sxx, **self.params)
+        elif plot_type == 'classification':
+            show = self.classes_checkbox.isChecked()
+            self.canvas.display_classification(time, classification, show=show)
+        elif plot_type == 'entropy':
+            show = self.entropy_checkbox.isChecked()
+            self.canvas.display_entropy(time, entropy, show=show)
+        elif plot_type == 'power':
+            show = self.power_checkbox.isChecked()
+            self.canvas.display_power(time, power, show=show)
+        else:
+            self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
+
+    @QtCore.pyqtSlot(str)    
+    def auto_classify(self, mode):
+        pass
+
+    @QtCore.pyqtSlot(str)    
+    def find_motifs(self, mode):
+        pass
+       
+    def find_files(self, directory, pattern):
+        """Return filenames matching pattern in directory"""
+        
+        return [os.path.join(directory, fname) 
+                for fname in os.listdir(directory) 
+                if fnmatch.fnmatch(os.path.basename(fname), pattern)]
+        
+    
+        
+class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
+    """Subclasses the FigureCanvas to provide features for spectrogram display
+    
+    Of primary interest is that this class keeps record of all the axes on the
+    plot by name, with independent y scales but a uniform x-scale.  The primary
+    intent of this class is to bound the x-scale so that it is impossible to
+    scroll, pan, or zoom outside of the domain set in the public instance
+    variable x_constraint.  Anything that moves that plot that is not contained
+    within this class should emit a signal which should be bound to this class's
+    'navigate' method.  navigate corrects for any navigation not done by the 
+    SpectrogramCanvas and then redraws.
+    """
+    
+    def __init__(self, figure_):
+        self.logger = logging.getLogger('SpectrogramCanvas.logger')
+        
+        #So, multiple inheritance is fun
+        #This works if it goes QObject, FigureCanvas
+        #Breaks if it goes FigureCanvas, QObject - and in weird ways too
+        #Using super seeeeeems not broken?  We hope
+        #QtCore.QObject.__init__(self)
+        #FigureCanvas.__init__(self, figure_)
+        super(SpectrogramCanvas, self).__init__(figure_)
+
+        #Extent of the spectrogram data, for homing and as domain bound
+        self.extent = ()
+        #Dictionary mapping str->axis object
+        self.axis_dict = {}
+        #Ordered list of axis names, in order added
+        self.axis_names = []
+        
+        self.tools = {}
+        
+        self.image = None
+        
+        self.last_gui_refresh_time = time.time()
+        self.marker = 0
+        self.current_selection = ()
+        
+    def add_tool(self, tool):
+        """Add the tool to the tools dictionary and connect any known signals"""
+        
+        self.tools[type(tool).__name__] = tool
+        
+        if isinstance(tool, SpectrogramNavBar):
+            tool.navigate.connect(self.navigate)
+            tool.set_selection.connect(self.set_selection)
+            tool.set_marker.connect(self.set_marker)
+    
+    @QtCore.pyqtSlot(dict)
+    def navigate(self, kwargs):
+        """Receive all navigation signals that this canvas must deal with"""
+        
+        try:
+            navtype = kwargs['type']
+        except KeyError:
+            self.error('Invalid navigation signal or command %s, no type'
+                    ' provided', str(kwargs))
+            return
+        
+        if navtype == 'drag_pan':
+            try:
+                ax = kwargs['axis']
+                button = kwargs['button']
+                key = kwargs['key']
+                x = kwargs['x']
+                y = kwargs['y']
+                pre_drag_x = kwargs['pre_drag_x']
+                pre_drag_y = kwargs['pre_drag_y']
+            except KeyError:
+                self.logger.error('Invalid drag command or signal, cannot execute')
+                return
+            
+            ax.drag_pan(button, key, x, y)
+            
+            if not self.valid(ax.get_xlim()):
+                self.set_domain(pre_drag_x)
+                
+            if ax is not self.axis_dict['spectrogram']:
+                ax.set_ylim(pre_drag_y) 
+                
+        elif navtype == 'release_zoom':
+            try:
+                ax = kwargs['axis']
+                key = kwargs['key']
+                tup = kwargs['zoom_tuple']
+                mode = kwargs['mode']
+            except KeyError:
+                self.logger.error('Invalid drag command or signal, cannot execute')
+                return
+            
+            if key == 1:
+                direction = 'in'
+            elif key == 3:
+                direction = 'out'
+                
+            ax._set_view_from_bbox(tup, direction, mode, False, False)   
+            
+            if direction=='out' and not self.valid(ax.get_xlim()):
+                self.set_domain(self.extent[0:2])
+                   
+        elif navtype == 'forward':
+            #Get any plot, read the plot domain, move left by 25% of domain
+            try:
+                ax = self.axis_dict[self.axis_names[0]]
+            except IndexError:
+                self.logger.warning("Scrolling irrelevant, no plots at this time")
+            else:
+                xbounds = ax.get_xlim()
+                width = xbounds[1] - xbounds[0]
+                if xbounds[1]+0.25*width < self.extent[1]:
+                    dx = 0.25*width
+                else:
+                    dx = self.extent[1] - xbounds[1]
+                    
+                new_bounds = (xbounds[0]+dx, xbounds[1]+dx)
+                
+                self.set_domain(self.validate(new_bounds))  
+                  
+        elif navtype == 'back':
+            #Get any plot, read the plot domain, move left by 25% of domain
+            try:
+                ax = self.axis_dict[self.axis_names[0]]
+            except IndexError:
+                self.logger.warning("Scrolling irrelevant, no plots at this time")
+            else:
+                xbounds = ax.get_xlim()
+                width = xbounds[1] - xbounds[0]
+                if xbounds[0]-0.25*width > self.extent[0]:
+                    dx = 0.25*width
+                else:
+                    dx = xbounds[0] - self.extent[0]
+                    
+                new_bounds = (xbounds[0]-dx, xbounds[1]-dx)
+                
+                self.set_domain(self.validate(new_bounds))  
+                      
+        elif navtype == 'home':
+            self.set_domain(self.extent[0:2])
+            self.set_range('spectrogram', self.extent[2:4])
+
+        else:
+            self.logger.warning('Unknown navigate type %s', navtype)
+        
+        self.draw_idle()
+        
+    @QtCore.pyqtSlot(tuple)
     def set_selection(self, sel):
         if not sel:
-            self.toolbar.remove_rubberband()
             self.current_selection = ()
+            self.drawRectangle(None)
         else:
             self.current_selection = sel
             
         self.logger.debug('Selection set to %s', str(self.current_selection))
     
+    @QtCore.pyqtSlot(float)
     def set_marker(self, marker):
         """Sets the marker, but does not update the GUI unless the change in
-        values from the last GUI value is significant"""
-        self.marker = marker
+        values from the last GUI value is significant
+        """
         
-        if time.time() - self.last_gui_refresh_time > 0.05:
+        self.logger.debug('Setting marker to %0.4f', marker)
+        self.marker = marker
+        t = time.time()
+        
+        if t - self.last_gui_refresh_time > 0.05:
             try:
-                ax = self.toolbar.axis_dict['marker']
+                ax = self.axis_dict['marker']
             except KeyError:
-                self.toolbar.add_axis('marker')
-                ax = self.toolbar.axis_dict['marker']
+                self.add_axis('marker')
+                ax = self.axis_dict['marker']
             
             if ax.lines:
                 ax.lines.remove(ax.lines[0])
             
-            ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2)
-            self.toolbar.set_range('marker', (0,1))
-            self.canvas.draw_idle()
-            
-            new_time = QtCore.QTime(0, self.marker/60, second=self.marker%60, msec=(self.marker%1)*1000)
-            
-            self.time_edit.setTime(new_time)
-            
-            self.last_gui_refresh_time = time.time()
+            ax.plot([self.marker, self.marker],[0,1], 'k--', linewidth=2, 
+                    scalex=False, scaley=False)
+            self.set_range('marker', (0,1))
+            self.draw_idle()
+            self.last_gui_refresh_time = t
+                
+    def add_axis(self, name):
+        """Add one axis to this plot, and associate it with name"""
         
-
-        if (self.marker > self.analyzer.active_song.domain[1]-0.1 and 
-                self.play_button.isChecked()):
-            self.logger.info('Ending playback at end of file')
-            self.play_button.click()
+        if not self.axis_dict:
+            self.axis_dict[name] = self.figure.add_subplot(111)
+            self.axis_names.append(name)
+        else:
+            self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
+            self.axis_names.append(name)
+                
+        if name in ['marker', 'classification', 'power', 'entropy']:
+            self.axis_dict[name].yaxis.set_visible(False) 
+            
+    def set_domain(self, x_domain):
+        """Set the domain for ALL plots (which must share an x-axis domain)"""
         
-        #self.logger.debug('Playback marker set to %0.4f', self.marker)
+        try:
+            assert self.valid(x_domain)
+        except AssertionError:
+            self.logger.warning("Assert failed: the domain command %s is" 
+                    "out of bounds", str(x_domain))
+            return
+     
+        self.logger.debug('Setting the plot domain to %s', str(x_domain))
 
-    def set_marker_visual(self):
-        """Sets the marker position in the GUI"""
-
+        for name in self.axis_names:
+            ax = self.axis_dict[name]
+            self.logger.debug('Setting domain for axis %s to %s', name, str(x_domain))
+            ax.set_xlim(x_domain)
+            
+        self.draw_idle()
         
+    def set_range(self, name, y_range):
+        """Set the y-axis range of the plot associated with name"""
+        
+        try:
+            ax = self.axis_dict[name]
+        except KeyError:
+            self.logger.warning('No such axis %s to set the range', name)
+            return
+        
+        self.logger.debug('Setting the range of %s to %s', name, str(y_range))
+        ax.set_ylim(y_range)
+        
+        self.draw_idle()
+        
+    def set_all_ranges(self, yranges):
+        """Set the range (y-axis) of all plots linked to this NavBar"""
+        
+        try:
+            for idx, yrange in enumerate(yranges):
+                self.set_range(self.axis_names[idx], yrange)
+        except IndexError:
+            self.logger.warning('Too many yranges provided, there are only %d' 
+                    'axes available', len(self.axis_names)+1)
+            return
+        
+    def valid(self, xlims):
+        if not xlims:
+            return False
+        if not self.extent:
+            return True
+        else:
+            return xlims[0] >= self.extent[0] and xlims[1] <= self.extent[1]
+        
+    def validate(self, xlims):
+        if self.valid(xlims):
+            return xlims
+        else:
+            return (max(xlims[0], self.extent[0]), min(xlims[1], self.extent[1]))
+         
+            
+    def display_spectrogram(self, t, f, Sxx, **params):
+        """Fetches spectrogram data from analyzer and plots it
+        
+        NO display method affects the domain in any way.  That must be done
+        external to the display method
+        """   
+          
+        try:
+            ax = self.axis_dict['spectrogram']
+        except KeyError:
+            self.add_axis('spectrogram') 
+            ax = self.axis_dict['spectrogram']
+            
+        try:
+            vmin = params['vmin']
+        except KeyError:
+            self.logger.warning('No parameter "vmin", using data minimum')
+            vmin = np.min(Sxx)
+            
+        try:
+            vmax = params['vmax']
+        except KeyError:
+            self.logger.warning('No parameter "vmax", using data maximum')
+            vmax = np.max(Sxx)
+        
+        halfbin_time = (t[1] - t[0]) / 2.0
+        halfbin_freq = (f[1] - f[0]) / 2.0
+        
+        # this method is much much faster!
+        # center bin
+        self.extent = (t[0] - halfbin_time, t[-1] + halfbin_time,
+                  f[0] - halfbin_freq, f[-1] + halfbin_freq)
+        
+        self.image = ax.imshow(Sxx, 
+                interpolation="nearest", 
+                extent=self.extent,
+                cmap='gray_r',
+                vmin=vmin,
+                vmax=vmax
+                )
+        
+        ax.axis('tight')
+
+        self.set_domain(self.extent[0:2])
+        self.set_range('spectrogram', self.extent[2:4])
+  
+        self.draw_idle() 
+        
+    def display_classification(self, t, classes, show=True):
+        """Fetches classification data from analyzer and plots it
+        
+        NO display method affects the domain in any way.  That must be done
+        external to the display method
+        """
+        
+        try:
+            ax = self.axis_dict['classification']
+        except KeyError:
+            self.add_axis('classification')
+            ax = self.axis_dict['classification']
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        l, = ax.plot(t, classes, 'b-', scalex=False, scaley=False)
+        
+        self.set_range('classification', (0, max(classes)+1))
+        
+        l.set_visible(show)
+
+        self.draw_idle() 
+        
+        
+    def display_entropy(self, t, entropy, show=True):
+
+        try:
+            ax = self.axis_dict['entropy']
+        except KeyError:
+            self.add_axis('entropy')
+            ax = self.axis_dict['entropy']
+             
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        l, = ax.plot(t, entropy, 'g-', scalex=False, scaley=False)
+           
+        self.set_range('entropy', (min(entropy), max(entropy)))
+
+        l.set_visible(show)
+
+        self.draw_idle()  
+        
+    def display_power(self, t, power, show=True):
+        try:
+            ax = self.axis_dict['power']
+        except KeyError:
+            self.add_axis('power')
+            ax = self.axis_dict['power']
+        
+        if ax.lines:
+            ax.lines.remove(ax.lines[0])
+            
+        l, = ax.plot(t, power, 'r-', scalex=False, scaley=False)
+
+        self.set_range('power', (min(power), max(power)))
+        
+        l.set_visible(show)
+        
+        self.draw_idle()        
+         
 class SpectrogramNavBar(NavigationToolbar2QT):
     """Provides a navigation bar specially configured for spectrogram interaction
     
     This class overrides a number of the methods of the standard 
     NavigationToolbar2QT and NavigationToolbar2, and adds some convenience
     methods.
+
+    The navigation bar tools have been updated.  The left and right buttons 
+    scroll left and right, rather than moving between views.  The pan and zoom 
+    buttons are identical, but with the horizontal bound enforced.  Several 
+    buttons are removed, and a 'select' button has been added which is used for 
+    manual classification of data.
     
-    Of primary interest is that this class keeps record of all the axes on the
-    plot by name, with independent y scales but a uniform x-scale.  The primary
-    intent of this class is to bound the x-scale so that it is impossible to
-    scroll, pan, or zoom outside of the domain set in the public instance
-    variable x_constraint.  
-    
-    Additionally, the navigation bar tools have been updated.  The left and 
-    right buttons scroll left and right, rather than moving between views.  The 
-    pan and zoom buttons are identical, but with the horizontal bound enforced.  
-    Several buttons are removed, and a 'select' button has been added which
-    is used for manual classification of data.
+    Signals:
+        'navigate': called any time an action is take which would change the 
+            canvas x_lims or y_lims (bounds).
+        'set_marker': called in select mode to move the song marker
+        'set_selection': called in select mode to set a selection and also to 
+            cancel a selection when necessary
     """
     
+    #List of signals for emitted by this class
+    navigate = pyqtSignal(dict)
+    set_marker = pyqtSignal(float)
+    set_selection = pyqtSignal(tuple)
     
     def __init__(self, canvas_, parent_, *args, **kwargs):  
         """Creates a SpectrogramNavigationBar instance
         
-        This method initializes logging, creates an empty dictionary of axes,
-        an empty selection
+        Requires that canvas_ be a SpectrogramCanvas
         """ 
         
         #initialize logging
-        self.logger = logging.getLogger('NavBar.logger')
+        self.logger = logging.getLogger('SpectrogramNavBar.logger')
             
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
@@ -456,15 +854,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         )
         
         NavigationToolbar2QT.__init__(self, canvas_, parent_, coordinates=False)
-                
-        #A single, unified set of x-boundaries, never violable
-        self.x_constraint = ()
-        #Dictionary mapping str->axis object
-        self.axis_dict = {}
-        #Ordered list of axis names, in order added
-        self.axis_names = []
-        
-        self.image = None
                 
         self.custom_toolitems = (
             (None, None, None, None),
@@ -499,133 +888,51 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self.coordinates = True
                     
         self._idSelect = None
-   
+        
+        try:
+            canvas_.add_tool(self)
+        except AttributeError as e:
+            self.logger.error('Cannot initialize SpectrogramNavBar - canvas '
+                    'type not valid')
+            raise e
+        
     def local_icon(self, name):
+        """Load a file in the /icons folder as a QIcon"""
+        
         imagefile = os.path.join(self.icons_dir, name)
         
         self.logger.debug('Icon image file %s', imagefile)
         return QtGui.QIcon(imagefile)
-         
-    def add_axis(self, name):
-        """Add one axis to this plot, and associate it with name"""
-        
-        if not self.axis_dict:
-            self.axis_dict[name] = self.canvas.figure.add_subplot(111)
-            self.axis_names.append(name)
-        else:
-            self.axis_dict[name] = self.axis_dict[self.axis_names[0]].twinx()
-            self.axis_names.append(name)
-                
-        if name in ['marker', 'classification', 'power', 'entropy']:
-            self.axis_dict[name].yaxis.set_visible(False)
-     
-    def set_domain(self, x_domain):
-        """Set the domain for ALL plots (which must share an x-axis domain)"""
-        
-        try:
-            assert self.valid(x_domain)
-        except AssertionError:
-            self.logger.warning("Assert failed: the domain command %s is" 
-                    "out of bounds", str(x_domain))
-            return
-     
-        self.logger.debug('Setting the plot domain to %s', str(x_domain))
 
-        for name in self.axis_names:
-            ax = self.axis_dict[name]
-            self.logger.debug('Setting domain for axis %s to %s', name, str(x_domain))
-            ax.set_xlim(x_domain)
-            
-        self.dynamic_update()
-    
-    def set_range(self, name, y_range):
-        """Set the y-axis range of the plot associated with name"""
-        
-        try:
-            ax = self.axis_dict[name]
-        except KeyError:
-            self.logger.warning('No such axis %s to set the range', name)
-            return
-        
-        self.logger.debug('Setting the range of %s to %s', name, str(y_range))
-        ax.set_ylim(y_range)
-        
-        self.dynamic_update()
-    
-    def set_all_ranges(self, yranges):
-        """Set the range (y-axis) of all plots linked to this NavBar"""
-        
-        try:
-            for idx, yrange in enumerate(yranges):
-                self.set_range(self.axis_names[idx], yrange)
-        except IndexError:
-            self.logger.warning('Too many yranges provided, there are only %d' 
-                    'axes available', len(self.axis_names)+1)
-            return
 
     def forward(self, *args):
-        """OVERRIDE the foward function in backend_bases.NavigationToolbar2
+        """Button callback for clicking the forward button
         
-        Scrolls right
+        OVERRIDE the foward function in backend_bases.NavigationToolbar2
+        Emits a signal causing the SpectrogramCanvas to scroll right
         """
         
         self.logger.debug('Clicked the forward button')
         
-        self.emit(QtCore.SIGNAL('set_selection'), ())
-        
-        try:
-            ax = self.axis_dict[self.axis_names[0]]
-        except IndexError:
-            self.logger.warning("Scrolling irrelevant, no plots at this time")
-        else:
-            xbounds = ax.get_xlim()
-            width = xbounds[1] - xbounds[0]
-            if xbounds[1]+0.25*width <= self.x_constraint[1]:
-                dx = 0.25*width
-            else:
-                dx = self.x_constraint[1] - xbounds[1]
-                
-            new_bounds = (xbounds[0]+dx, xbounds[1]+dx)
-            
-            self.set_domain(new_bounds)
+        self.set_selection.emit(())
+        self.navigate.emit({'type':'forward'})
      
     def back(self, *args):
-        """OVERRIDE the back function in backend_bases.NavigationToolbar2
+        """Button callback for clicking the back button
         
-        Scrolls left
+        OVERRIDE the back function in backend_bases.NavigationToolbar2
+        Emits a signal causing the SpectrogramCanvas to scroll left
         """
-        
         self.logger.debug('Clicked the back button')
         
-
-        self.emit(QtCore.SIGNAL('set_selection'), ())
-        
-        try:
-            ax = self.axis_dict[self.axis_names[0]]
-        except IndexError:
-            self.logger.warning("Scrolling irrelevant, no plots at this time")
-        else:
-            xbounds = ax.get_xlim()
-            width = xbounds[1] - xbounds[0]
-            if xbounds[0]-0.25*width >= self.x_constraint[0]:
-                dx = 0.25*width
-            else:
-                dx = xbounds[0] - self.x_constraint[0]
-                
-            new_bounds = (xbounds[0]-dx, xbounds[1]-dx)
-            
-            self.set_domain(new_bounds)        
+        self.set_selection.emit(())
+        self.navigate.emit({'type':'back'})
      
     def home(self, *args):
-        save_dict = {}
-        for name, ax in self.axis_dict.items():
-            if name != 'spectrogram':
-                save_dict[name] = ax.get_ylim()
-                
-        super(SpectrogramNavBar, self).home(*args) 
-         
-        for name, lim in save_dict.items():
-            self.set_range(name, lim) 
+        """Button callback for clicking the home button
+        
+        Override the home method of backend_bases.NavigationToolbar2"""
+        self.navigate.emit({'type':'home'})
             
     def drag_pan(self, event):
         """OVERRIDE the drag_pan function in backend_bases.NavigationToolbar2
@@ -636,30 +943,34 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         for a, _ in self._xypress:
             #safer to use the recorded button at the press than current button:
             #multiple buttons can get pressed during motion...
-            pre_drag_x = a.get_xlim()
-            pre_drag_y = a.get_ylim()
-            a.drag_pan(self._button_pressed, event.key, event.x, event.y)
-            
-            if not self.valid(a.get_xlim()):
-                self.set_domain(pre_drag_x)
-                
-            if a is not self.axis_dict['spectrogram']:
-                a.set_ylim(pre_drag_y)
-            
-        self.dynamic_update()
 
+            drag_data = {
+                    'type':'drag_pan',
+                    'axis':a, 
+                    'button':self._button_pressed, 
+                    'key':event.key,
+                    'x':event.x,
+                    'y':event.y,
+                    'pre_drag_x':a.get_xlim(),
+                    'pre_drag_y':a.get_ylim()}
+
+            self.navigate.emit(drag_data)
+            
     def pan(self, *args):
-        self.emit(QtCore.SIGNAL('set_selection'), ())
+        """Button callback for clicking the pan button"""
+        self.set_selection.emit(())
         super(SpectrogramNavBar, self).pan(*args)
         
     def zoom(self, *args):
-        self.emit(QtCore.SIGNAL('set_selection'), ())
+        """Button callback for clicking the zoom button"""
+
+        self.set_selection.emit(())
         super(SpectrogramNavBar, self).zoom(*args)
         
     def release_zoom(self, event):
         """OVERRIDE the release_zoom method in backend_bases.NavigationToolbar2
         
-        Identical function with domain checking added
+        Emits a signal containing the data necessary to zoom the plot
         """
         
         self.logger.debug('Called release_zoom')
@@ -669,67 +980,45 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         self._ids_zoom = []
 
         self.remove_rubberband()
-
+        
         if not self._xypress:
             return
 
         x, y = event.x, event.y
-        lastx, lasty, _, _, _ = self._xypress[0]
+        lastx, lasty, ax, _, _ = self._xypress[0]
         
-        try:
-            a = self.axis_dict['spectrogram']
-        except KeyError:
-            self.logger.warning('No plots, no zooming')
-            return
-        # ignore singular clicks - 5 pixels is a threshold
-        # allows the user to "cancel" a zoom action
-        # by zooming by less than 5 pixels
-        if ((abs(x - lastx) < 5 and self._zoom_mode!="y") or
-                (abs(y - lasty) < 5 and self._zoom_mode!="x")):
-            
-            if self._button_pressed == 1:
-                direction = 'in'
-                
-            elif self._button_pressed == 3:
-                direction = 'out'
-            
-            
+        if abs(x - lastx) < 5 and abs(y - lasty) < 5:
             self._xypress = None
             self.release(event)
-            self.draw()
             return
 
-        if self._button_pressed == 1:
-            direction = 'in'
-        elif self._button_pressed == 3:
-            direction = 'out'
-
-        a._set_view_from_bbox((lastx, lasty, x, y), direction,
-                              self._zoom_mode, False, False)
+        data = {
+                'type':'release_zoom',
+                'axis':ax,
+                'key':self._button_pressed,
+                'zoom_tuple':(lastx, lasty, x, y),
+                'mode':self._zoom_mode
+                }
         
-        if not self.valid(a.get_xlim()):
-            self.set_domain(self.validate(a.get_xlim()))
-
-        self.draw()
+        self.navigate.emit(data)
+        
         self._xypress = None
         self._button_pressed = None
 
         self._zoom_mode = None
 
         self.push_current()
-        self.release(event)    
-    
+        self.release(event) 
+            
     def _update_buttons_checked(self):
-        # sync button checkstates to match active mode
+        """sync button checkstates to match active mode"""
         super(SpectrogramNavBar, self)._update_buttons_checked()
         self._actions['select'].setChecked(self._active == 'SELECT')
     
     def select(self, *args):
-        self.logger.debug('Clicked the select button on the toolbar')
-        
         """Activate the select tool. select with left button, set cursor with right"""
-        # set the pointer icon and button press funcs to the
-        # appropriate callbacks
+
+        self.logger.debug('Clicked the select button on the toolbar')
 
         if self._active == 'SELECT':
             self._active = None
@@ -752,9 +1041,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             self.canvas.widgetlock(self)
         else:
             self.canvas.widgetlock.release(self)
-
-        #for a in self.canvas.figure.get_axes():
-        #    a.set_navigate_mode(self._active)
 
         self.set_message(self.mode)
         
@@ -789,7 +1075,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             return
 
         x, y = event.x, event.y
-        self._select_start = event.xdata
+        #self._select_start = event.xdata
 
         # push the current view to define home if stack is empty
         if self._views.empty():
@@ -805,48 +1091,12 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 
         self.press(event)
     
-    def release_select(self, event):
-        self.logger.debug('Released mouse in select mode')
-        
-        self.canvas.mpl_disconnect(self._idSelect)
-        self._idSelect = None
-
-        if not self._xypress:
-            return
-
-        lastx, lasty, _, _, _ = self._xypress[0]
-    
-        if self._button_pressed == 3:
-            self.emit(QtCore.SIGNAL('set_marker'), event.xdata)
-    
-        elif self._button_pressed == 1:
-            # ignore singular clicks - 5 pixels is a threshold
-            # allows the user to "cancel" a selection action
-            # by selecting by less than 5 pixels
-            if (abs(event.x - lastx) < 5 and abs(event.y - lasty) < 5):
-                
-                self.emit(QtCore.SIGNAL('set_selection'), ())
-                
-            else:
-                if event.xdata > self._select_start:
-                    sel = (self._select_start, event.xdata)
-                else:
-                    sel = (event.xdata, self._select_start)
-                
-                self.emit(QtCore.SIGNAL('set_marker'), sel[0])
-                self.emit(QtCore.SIGNAL('set_selection'), sel)
-
-
-        self.draw()
-        self._xypress = None
-        self._button_pressed = None
-
-        self.release(event)
-    
     def drag_select(self, event):
+        """drag mouse callback when select function is active"""
         
         if self._button_pressed == 3:
-            return 
+            self.set_marker.emit(event.xdata)
+             
         elif self._button_pressed == 1:
             if self._xypress:
                 x, y = event.x, event.y
@@ -858,10 +1108,59 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 y, lasty = max(min(y, lasty), y1), min(max(y, lasty), y2)
     
                 self.draw_rubberband(event, x, y, lastx, lasty)
+                    
+    def release_select(self, event):
+        """Release mouse callback when select button is checked"""
+        
+        self.logger.debug('Released mouse in select mode')
+        
+        self.canvas.mpl_disconnect(self._idSelect)
+        self._idSelect = None
+
+        if not self._xypress:
+            return
+
+        lastx, lasty, ax, _, _ = self._xypress[0]
+    
+        if self._button_pressed == 3 and event.xdata is not None:
+            self.set_marker.emit(event.xdata)
+    
+        elif self._button_pressed == 1:
+            # ignore singular clicks - 5 pixels is a threshold
+            # allows the user to "cancel" a selection action
+            # by selecting by less than 5 pixels
+            if (abs(event.x - lastx) < 5 and abs(event.y - lasty) < 5):
+                
+                self.set_selection.emit(())
+                
+            else:
+                x = event.x
+                x1, _, x2, _ = ax.bbox.extents
+                x, lastx = max(min(x, lastx), x1), min(max(x, lastx), x2)
+                #y, lasty = max(min(event.y, lasty), y1), min(max(event.y, lasty), y2)
+
+                self.logger.debug('Selected pixel domain %0.4f, %0.4f', x, lastx)
+                
+                inv = ax.transData.inverted()
+                
+                sel = inv.transform((x, 0))[0], inv.transform((lastx, 0))[0]
+                
+                self.logger.debug('Selected domain %s', str(sel))
+
+                self.set_marker.emit(sel[0])
+                self.set_selection.emit(sel)
+
+        self._xypress = None
+        self._button_pressed = None
+
+        self.release(event)
+
         
     def _set_cursor(self, event):
         """OVERRIDE the _set_cursor method in backend_bases.NavigationToolbar2"""
-        
+         
+        #self.logger.info('Calling set_cursor with active %s', self._active) 
+         
         if not event.inaxes or not self._active:
             if self._lastCursor != cursors.POINTER:
                 self.set_cursor(cursors.POINTER)
@@ -874,28 +1173,13 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             elif (self._active == 'PAN' and
                   self._lastCursor != cursors.MOVE):
                 self.set_cursor(cursors.MOVE)
-
                 self._lastCursor = cursors.MOVE   
             elif (self._active == 'SELECT' and
                     self._lastCursor != cursors.SELECT_REGION):
                 self.set_cursor(cursors.SELECT_REGION)
+                self._lastCursor = cursors.SELECT_REGION
+
     
-    def valid(self, xlims):
-        if not xlims:
-            return False
-        if not self.x_constraint:
-            return True
-        else:
-            return xlims[0] >= self.x_constraint[0] and xlims[1] <= self.x_constraint[1]
-        
-    def validate(self, xlims):
-        if self.valid(xlims):
-            return xlims
-        else:
-            return (max(xlims[0], self.x_constraint[0]), min(xlims[1], self.x_constraint[1]))
-        
-        
-        
 class OutLog:
     '''OutLog pipes output from a stream to a QTextEdit widget
     

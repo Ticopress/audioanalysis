@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>759</width>
-    <height>638</height>
+    <width>649</width>
+    <height>474</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -16,213 +16,292 @@
     <verstretch>0</verstretch>
    </sizepolicy>
   </property>
+  <property name="focusPolicy">
+   <enum>Qt::StrongFocus</enum>
+  </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Jarvis Lab Audio Analyzer</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout">
+   <layout class="QVBoxLayout" name="verticalLayout_3">
     <item>
-     <widget class="QTabWidget" name="stack">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="tabShape">
-       <enum>QTabWidget::Rounded</enum>
-      </property>
-      <property name="currentIndex">
-       <number>1</number>
-      </property>
-      <widget class="QWidget" name="stackPage1">
-       <property name="accessibleName">
-        <string/>
-       </property>
-       <attribute name="title">
-        <string>Neural Net Training</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="layout">
-        <item>
-         <layout class="QHBoxLayout" name="horizontalLayout">
-          <item>
-           <widget class="QPushButton" name="open_file">
-            <property name="minimumSize">
-             <size>
-              <width>155</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Open Audio File</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/wave.png</normaloff>icons/wave.png</iconset>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="file_name">
-            <property name="text">
-             <string/>
-            </property>
-            <property name="dragEnabled">
-             <bool>true</bool>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="placeholderText">
-             <string comment="file name here" extracomment="file name here"/>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <spacer name="horizontalSpacer_7">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="sizeType">
-             <enum>QSizePolicy::Minimum</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>10</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <widget class="QWidget" name="plot_container" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <widget class="QSplitter" name="splitter_3">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <widget class="QTabWidget" name="tabs">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="MinimumExpanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="focusPolicy">
+          <enum>Qt::NoFocus</enum>
+         </property>
+         <property name="tabPosition">
+          <enum>QTabWidget::North</enum>
+         </property>
+         <property name="tabShape">
+          <enum>QTabWidget::Rounded</enum>
+         </property>
+         <property name="currentIndex">
+          <number>0</number>
+         </property>
+         <property name="usesScrollButtons">
+          <bool>false</bool>
+         </property>
+         <widget class="QWidget" name="sf_tab">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>200</height>
-           </size>
-          </property>
-          <layout class="QVBoxLayout" name="plot_vl"/>
+          <attribute name="title">
+           <string>Songs</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_2">
+           <property name="margin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QTableWidget" name="song_table">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="toolTip">
+              <string>List of loaded song files</string>
+             </property>
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+             <property name="selectionMode">
+              <enum>QAbstractItemView::SingleSelection</enum>
+             </property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectRows</enum>
+             </property>
+             <property name="wordWrap">
+              <bool>false</bool>
+             </property>
+             <column>
+              <property name="text">
+               <string>File</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Start</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Length</string>
+              </property>
+             </column>
+            </widget>
+           </item>
+          </layout>
          </widget>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="horizontalLayout_7">
+         <widget class="QWidget" name="motif_tab">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <attribute name="title">
+           <string>Motifs</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_5">
+           <property name="margin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QTableWidget" name="motif_table">
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="toolTip">
+              <string>List of discovered motifs</string>
+             </property>
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+             <property name="selectionMode">
+              <enum>QAbstractItemView::SingleSelection</enum>
+             </property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectRows</enum>
+             </property>
+             <property name="wordWrap">
+              <bool>false</bool>
+             </property>
+             <column>
+              <property name="text">
+               <string>File</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Start</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Length</string>
+              </property>
+             </column>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+        <widget class="QWidget" name="layoutWidget">
+         <layout class="QVBoxLayout" name="verticalLayout_4">
           <item>
-           <widget class="QPushButton" name="play_button">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="text">
-             <string>Play Song</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/play.png</normaloff>icons/play.png</iconset>
-            </property>
-            <property name="iconSize">
-             <size>
-              <width>24</width>
-              <height>24</height>
-             </size>
-            </property>
-            <property name="checkable">
-             <bool>true</bool>
-            </property>
-            <property name="checked">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QTimeEdit" name="time_edit">
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="buttonSymbols">
-             <enum>QAbstractSpinBox::UpDownArrows</enum>
-            </property>
-            <property name="currentSection">
-             <enum>QDateTimeEdit::MinuteSection</enum>
-            </property>
-            <property name="displayFormat">
-             <string>mm:ss.zzz</string>
-            </property>
-            <property name="timeSpec">
-             <enum>Qt::OffsetFromUTC</enum>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QCheckBox" name="entropy_checkbox">
-            <property name="text">
-             <string>Entropy</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QCheckBox" name="power_checkbox">
-            <property name="text">
-             <string>Power</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <spacer name="horizontalSpacer_8">
+           <spacer name="verticalSpacer">
             <property name="orientation">
-             <enum>Qt::Horizontal</enum>
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Fixed</enum>
             </property>
             <property name="sizeHint" stdset="0">
              <size>
-              <width>40</width>
-              <height>20</height>
+              <width>20</width>
+              <height>10</height>
              </size>
             </property>
            </spacer>
           </item>
           <item>
-           <widget class="QPushButton" name="confirm">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="text">
-             <string>Confirm Classes</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/ok.png</normaloff>icons/ok.png</iconset>
-            </property>
-            <property name="iconSize">
-             <size>
-              <width>24</width>
-              <height>24</height>
-             </size>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="horizontalLayout">
+            <item>
+             <widget class="QWidget" name="plot_container" native="true">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>200</height>
+               </size>
+              </property>
+              <layout class="QVBoxLayout" name="plot_vl">
+               <property name="margin">
+                <number>0</number>
+               </property>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_7">
+            <item>
+             <widget class="QPushButton" name="play_button">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="toolTip">
+               <string>Press to play the highlighted song</string>
+              </property>
+              <property name="text">
+               <string>Play</string>
+              </property>
+              <property name="icon">
+               <iconset>
+                <normaloff>icons/play.png</normaloff>icons/play.png</iconset>
+              </property>
+              <property name="iconSize">
+               <size>
+                <width>24</width>
+                <height>24</height>
+               </size>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+              <property name="checked">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="classes_checkbox">
+              <property name="text">
+               <string>Classifications</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="entropy_checkbox">
+              <property name="toolTip">
+               <string>Display plot of Wiener entropy</string>
+              </property>
+              <property name="text">
+               <string>Entropy</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="power_checkbox">
+              <property name="toolTip">
+               <string>Display plot of average power</string>
+              </property>
+              <property name="text">
+               <string>Power</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
-        </item>
-       </layout>
-      </widget>
-      <widget class="QWidget" name="stackPage2">
-       <attribute name="title">
-        <string>Classification</string>
-       </attribute>
-      </widget>
-     </widget>
+        </widget>
+       </widget>
+      </item>
+     </layout>
     </item>
     <item>
      <widget class="QTextEdit" name="console">
@@ -235,7 +314,7 @@
       <property name="minimumSize">
        <size>
         <width>0</width>
-        <height>75</height>
+        <height>100</height>
        </size>
       </property>
       <property name="frameShadow">
@@ -253,15 +332,155 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>759</width>
+     <width>649</width>
      <height>22</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <widget class="QMenu" name="menuOpen">
+     <property name="title">
+      <string>Load...</string>
+     </property>
+     <addaction name="action_load_files"/>
+     <addaction name="action_load_folder"/>
+     <addaction name="separator"/>
+     <addaction name="action_load_nn"/>
+    </widget>
+    <widget class="QMenu" name="menuLoad">
+     <property name="title">
+      <string>Save...</string>
+     </property>
+     <addaction name="action_save_all_motifs"/>
+     <addaction name="action_save_current_motif"/>
+     <addaction name="separator"/>
+     <addaction name="action_save_nn"/>
+    </widget>
+    <widget class="QMenu" name="menuNew">
+     <property name="title">
+      <string>New...</string>
+     </property>
+     <addaction name="action_new_nn"/>
+    </widget>
+    <widget class="QMenu" name="menuClassify">
+     <property name="title">
+      <string>Classify</string>
+     </property>
+     <addaction name="action_classify_all"/>
+     <addaction name="action_classify_current"/>
+    </widget>
+    <widget class="QMenu" name="menuFind_Motifs">
+     <property name="title">
+      <string>Find Motifs</string>
+     </property>
+     <addaction name="action_find_all_motifs"/>
+     <addaction name="action_find_current_motifs"/>
+    </widget>
+    <addaction name="menuNew"/>
+    <addaction name="menuOpen"/>
+    <addaction name="menuLoad"/>
+    <addaction name="separator"/>
+    <addaction name="menuClassify"/>
+    <addaction name="menuFind_Motifs"/>
+   </widget>
+   <addaction name="menuFile"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionMotif_Selection">
    <property name="text">
     <string>Motif Selection</string>
+   </property>
+  </action>
+  <action name="actioncreate">
+   <property name="text">
+    <string>Create From Song</string>
+   </property>
+  </action>
+  <action name="actionload">
+   <property name="text">
+    <string>Load From File</string>
+   </property>
+  </action>
+  <action name="actiondump">
+   <property name="text">
+    <string>Dump To File</string>
+   </property>
+  </action>
+  <action name="actionclassify">
+   <property name="text">
+    <string>Classify All Songs</string>
+   </property>
+  </action>
+  <action name="actionLoad_Songs">
+   <property name="text">
+    <string>Load Song Files</string>
+   </property>
+  </action>
+  <action name="actionLoad_Song_Folder">
+   <property name="text">
+    <string>Load Song Folder</string>
+   </property>
+  </action>
+  <action name="action_save_nn">
+   <property name="text">
+    <string>Neural Net to File</string>
+   </property>
+  </action>
+  <action name="action_load_nn">
+   <property name="text">
+    <string>Neural Net from File</string>
+   </property>
+  </action>
+  <action name="action_load_files">
+   <property name="text">
+    <string>WAV File/Files</string>
+   </property>
+  </action>
+  <action name="action_load_folder">
+   <property name="text">
+    <string>Folder of WAV Files</string>
+   </property>
+  </action>
+  <action name="action_new_nn">
+   <property name="text">
+    <string>Neural Net</string>
+   </property>
+  </action>
+  <action name="actionCurrent_Song">
+   <property name="text">
+    <string>Current Song</string>
+   </property>
+  </action>
+  <action name="action_save_current_motif">
+   <property name="text">
+    <string>Current Motif</string>
+   </property>
+  </action>
+  <action name="action_save_all_motifs">
+   <property name="text">
+    <string>All Motifs</string>
+   </property>
+  </action>
+  <action name="action_classify_all">
+   <property name="text">
+    <string>All Songs</string>
+   </property>
+  </action>
+  <action name="action_classify_current">
+   <property name="text">
+    <string>Current Song</string>
+   </property>
+  </action>
+  <action name="action_find_all_motifs">
+   <property name="text">
+    <string>All Songs</string>
+   </property>
+  </action>
+  <action name="action_find_current_motifs">
+   <property name="text">
+    <string>Current Song</string>
    </property>
   </action>
  </widget>
