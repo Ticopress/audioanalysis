@@ -61,9 +61,11 @@ class AudioAnalyzer():
         for i, layerspec in enumerate(layers):
             if i==0: #size the input layer correctly
                 try:
-                    layerspec['kwargs']['input_shape'] = (1, len(self.active_song.freq), 1)
+                    layerspec['kwargs']['input_shape'] = (1, 
+                            len(self.active_song.freq), 1)
                 except (AttributeError, TypeError):
-                    self.logger.error('No active song set, cannot build neural net')
+                    self.logger.error('No active song set, cannot build neural'
+                            ' net')
                     return None
             l = self.make_layer(layerspec)
             nn.add(l)
@@ -71,9 +73,12 @@ class AudioAnalyzer():
             self.logger.debug('Layer input: %s', str(l.input_shape))
             self.logger.debug('Layer output: %s', str(l.output_shape))
             
-        self.logger.info('Building the output layer for %d classes', self.active_song.num_classes)
+        self.logger.info('Building the output layer for %d classes', 
+                self.active_song.num_classes)
+        
         l = self.make_layer({'type':'Dense', 'args':(self.active_song.num_classes,)})   
         nn.add(l)
+        
         l = self.make_layer({'type':'Activation', 'args':('softmax',)})
         nn.add(l)
         
@@ -184,7 +189,7 @@ class AudioAnalyzer():
         self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(Sxx))
         self.logger.debug('STFT dimensions %s', str(Sxx.shape))               
 
-        if sf.classification.size is 0:
+        if sf.classification is None:
             sf.classification = np.zeros(time_list.size)
             
         sf.time = time_list
@@ -357,11 +362,11 @@ class SongFile:
         self.Fs = Fs
         
         #Post-processed values (does not include spectrogram)
-        self.time = np.ndarray(0)
-        self.freq = np.ndarray(0)
-        self.classification = np.ndarray(0)
-        self.entropy = np.ndarray(0)
-        self.power = np.ndarray(0)
+        self.time = None
+        self.freq = None
+        self.classification = None
+        self.entropy = None
+        self.power = None
         
         
         self.name = name
@@ -436,17 +441,23 @@ class SongFile:
         return sfs
     
     def __str__(self):
-        return '%s.%04d_%04d'.format(self.name, self.start, self.end)
+        return '{:s}_{:04d}_{:04d}'.format(self.name, self.start, self.length+self.start)
     
     def __repr__(self):
         return str(self)
 
-    def export(self):
+    def export(self, destination, filename=None):
         """Exports data in WAV format
         
         Not useful for SongFiles you just loaded, but possible quite useful for
         generated SongFiles, or for subclasses of SongFile, like for SongMotifs
         """
+        
+        if filename is None:
+            filename = str(self) + '.wav'
+        
+        fullpath = os.path.join(destination, filename)
+        
         pass
     
     
