@@ -35,8 +35,6 @@ import numpy as np
 
 from freqanalysis import AudioAnalyzer, SongFile
 from PyQt4.QtCore import pyqtSignal
-from _sqlite3 import Row
-
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
@@ -56,6 +54,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         super(AudioGUI, self).__init__()
         self.setupUi(self)
         
+        self.raise_()
+        self.activateWindow()
         #Initialize logging
         self.logger = logging.getLogger('AudioGUI.logger')
         
@@ -214,10 +214,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.warning('No table %s, cannot update', name)
             return
-        
-        
-        #table.clearContents()
-        
+                
         for row,songfile in enumerate(data):
             if table.rowCount() == row:
                 table.insertRow(row)
@@ -280,11 +277,15 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     @QtCore.pyqtSlot()              
     def save_motifs(self, mode):
         if mode == 'all':
-            #Get a folder, put them there
-            pass
+            folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
+            
+            for mf in self.analyzer.motifs:
+                mf.export(destination=folder_name)
+            
         elif mode == 'current':
-            #Get a filename, put it there
-            pass
+            folder_name = QtGui.QFileDialog.getSaveFileName(self, 'Enter motif file name')
+            
+            
         else:
             #Get a filename, put it there
             try:
@@ -366,8 +367,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         select tool, the keypress will assign the value of that number to be
         the classification of the selected region
         """
-        self.logger.info('Current selection is %s', str(self.canvas.current_selection))
-        
+                
         if (e.text() in [str(i) for i in range(10)] and 
                 self.canvas.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time, 
