@@ -63,7 +63,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         sys.stdout = OutLog(self.console, sys.stdout)
         sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -374,9 +374,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     np.asarray(self.canvas.current_selection))
             
             self.analyzer.active_song.classification[indices[0]:indices[1]] = int(e.text())
-            
-            self.logger.info('Updating class from %s to be %d', 
-                    str(self.analyzer.active_song.time[indices]), int(e.text()))
         
             self.plot('classification')
             self.canvas.set_selection(())  
@@ -1078,7 +1075,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             return
 
         x, y = event.x, event.y
-        self._select_start = event.xdata
+        #self._select_start = event.xdata
 
         # push the current view to define home if stack is empty
         if self._views.empty():
@@ -1093,44 +1090,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 self.drag_select)
 
         self.press(event)
-    
-    def release_select(self, event):
-        """Release mouse callback when select button is checked"""
-        
-        self.logger.debug('Released mouse in select mode')
-        
-        self.canvas.mpl_disconnect(self._idSelect)
-        self._idSelect = None
-
-        if not self._xypress:
-            return
-
-        lastx, lasty, _, _, _ = self._xypress[0]
-    
-        if self._button_pressed == 3 and event.xdata is not None:
-            self.set_marker.emit(event.xdata)
-    
-        elif self._button_pressed == 1:
-            # ignore singular clicks - 5 pixels is a threshold
-            # allows the user to "cancel" a selection action
-            # by selecting by less than 5 pixels
-            if (abs(event.x - lastx) < 5 and abs(event.y - lasty) < 5):
-                
-                self.set_selection.emit(())
-                
-            else:
-                if event.xdata > self._select_start:
-                    sel = (self._select_start, event.xdata)
-                else:
-                    sel = (event.xdata, self._select_start)
-                
-                self.set_marker.emit(sel[0])
-                self.set_selection.emit(sel)
-
-        self._xypress = None
-        self._button_pressed = None
-
-        self.release(event)
     
     def drag_select(self, event):
         """drag mouse callback when select function is active"""
@@ -1149,6 +1108,53 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 y, lasty = max(min(y, lasty), y1), min(max(y, lasty), y2)
     
                 self.draw_rubberband(event, x, y, lastx, lasty)
+                    
+    def release_select(self, event):
+        """Release mouse callback when select button is checked"""
+        
+        self.logger.debug('Released mouse in select mode')
+        
+        self.canvas.mpl_disconnect(self._idSelect)
+        self._idSelect = None
+
+        if not self._xypress:
+            return
+
+        lastx, lasty, ax, _, _ = self._xypress[0]
+    
+        if self._button_pressed == 3 and event.xdata is not None:
+            self.set_marker.emit(event.xdata)
+    
+        elif self._button_pressed == 1:
+            # ignore singular clicks - 5 pixels is a threshold
+            # allows the user to "cancel" a selection action
+            # by selecting by less than 5 pixels
+            if (abs(event.x - lastx) < 5 and abs(event.y - lasty) < 5):
+                
+                self.set_selection.emit(())
+                
+            else:
+                x = event.x
+                x1, _, x2, _ = ax.bbox.extents
+                x, lastx = max(min(x, lastx), x1), min(max(x, lastx), x2)
+                #y, lasty = max(min(event.y, lasty), y1), min(max(event.y, lasty), y2)
+
+                self.logger.debug('Selected pixel domain %0.4f, %0.4f', x, lastx)
+                
+                inv = ax.transData.inverted()
+                
+                sel = inv.transform((x, 0))[0], inv.transform((lastx, 0))[0]
+                
+                self.logger.debug('Selected domain %s', str(sel))
+
+                self.set_marker.emit(sel[0])
+                self.set_selection.emit(sel)
+
+        self._xypress = None
+        self._button_pressed = None
+
+        self.release(event)
+
         
     def _set_cursor(self, event):
         """OVERRIDE the _set_cursor method in backend_bases.NavigationToolbar2"""
