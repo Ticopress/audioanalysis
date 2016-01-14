@@ -23,7 +23,7 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 from scipy import signal
 from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
 import numpy as np
-import logging, sys, time, os
+import logging, sys, os
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
@@ -440,6 +440,18 @@ class SongFile:
             
         return sfs
     
+    @classmethod
+    def find_motifs(cls, sf):
+        """Cut motifs from a classified songfile and build songfiles from them
+        
+        This method takes a songfile, assumes it has already been correctly
+        classified and therefore has a classification that is not None, it scans
+        through that classification and determines (with some resilience to 
+        noise) the regions where there appears to be a motif.
+        """
+        
+        pass
+    
     def __str__(self):
         return '{:s}_{:04d}_{:04d}'.format(self.name, self.start, self.length+self.start)
     
@@ -459,34 +471,3 @@ class SongFile:
         fullpath = os.path.join(destination, filename)
         
         pass
-    
-    
-class SongMotif(SongFile):
-    """A special class for storing a short motif
-    
-    This class differs from a SongFile only in that:
-        1) it cannot be loaded from a file.  Instead, it is initialized with 
-            all of its data (class, entropy, power, even Sxx spectrogram)
-        2) they must be shorter than 5 seconds
-        3) they retain their spectrogram - hence the length limit
-        
-    Basically, this is a convenience class for data storage, not much else
-    """
-    
-    def __init__(self, name, data, Fs, time, classes, entropy, power, Sxx):
-        """creates a new SongMotif from all of the motif's data"""  
-        self.name = name
-        
-        self.data = data
-        self.Fs = Fs
-        
-        self.time = time
-        self.classification = classes
-        
-        self.entropy = entropy
-        self.power = power
-        
-        self.Sxx = Sxx
-        
-        self.start = min(time)
-        self.length = max(time)-self.start
