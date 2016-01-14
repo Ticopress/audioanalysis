@@ -18,8 +18,8 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 
 To build this module using pyinstaller, use something like:
 
-pyinstaller --onefile --distpath=./executables/mac_osx --name=audioanalysis
-        --paths=./audioanalysis {audioanalysis/__main__.py
+pyinstaller --onefile --windowed --distpath=./executables/mac_osx 
+    --name=audioanalysis --paths=./audioanalysis audioanalysis/__main__.py
         
 Called from the project folder (same level as setup.py)
     
@@ -41,7 +41,7 @@ from setuptools import setup
 import os
 
 def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), name)).read()
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 
 setup(name='audioanalysis',
@@ -52,7 +52,7 @@ setup(name='audioanalysis',
       url='https://github.com/jpalpant/jarvis-lab-audio-analysis',
       license='GPLv3',
       packages=['audioanalysis'],
-      install_requires=[],
+      install_requires=['logging', 'numpy', 'scipy', 'matplotlib', 'pyaudio'],
       long_description=read('README.txt'),
       entry_points = {
         'console_scripts': ['audioanalsys=audioanalysis.__main__:run_as_executable'],

@@ -124,7 +124,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
         
-        
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 'display_threshold':-400, 
                        'split':600, 'vmin':-90, 'vmax':-20, 'nfft':512, 
