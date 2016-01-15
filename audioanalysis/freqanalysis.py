@@ -114,15 +114,7 @@ class AudioAnalyzer():
         """Select a SongFile from the current list and designate one as the 
         active SongFile
         """
-            
-        try:
-            idx = self.songs.index(sf)
-        except IndexError:
-            self.logger.info('Songfile %s added to list', sf.name)
-            idx = len(self.songs)
-            self.songs.append(sf)
-        
-        self.active_song = self.songs[idx]
+        self.active_song = sf
         
         try:
             self.Sxx = self.active_song.Sxx
@@ -441,22 +433,56 @@ class SongFile:
         return sfs
     
     @classmethod
-    def find_motifs(cls, sf):
+    def find_motifs(cls, sf, **params):
         """Cut motifs from a classified songfile and build songfiles from them
         
-        This method takes a songfile, assumes it has already been correctly
+        This method takes a SongFile, assumes it has already been correctly
         classified and therefore has a classification that is not None, it scans
-        through that classification and determines (with some resilience to 
+        through that classification and determines (with some resistance to 
         noise) the regions where there appears to be a motif.
+        
+        Note: motifs are indicated anywhere the classification is nonzero.
         """
         
-        pass
+        min_dur=params.get('min_dur',0)
+        max_dur=params.get('max_dur', float('inf'))
+        smooth_gap=params.get('smooth_gap', 0)
+            
+        motifs = []
+        
+        try:
+            times = sf.time[np.nonzero(sf.classification)]
+        except TypeError:
+            sf.logger.info('Song %s does not have a classification, cannot find motifs', sf.name)
+            return []
+        
+        in_motif = False
+        
+        for i, t in enumerate(times):
+            if not in_motif:
+                start_time = t
+                in_motif = True
+                sf.logger.debug('Motif for %s start at %0.4f', sf.name, start_time)
+            
+            if in_motif and (i==len(times)-1 or times[i+1]-t > smooth_gap):
+                data = sf.data[sf.time_to_idx(start_time):sf.time_to_idx(t)]
+                #name and Fs are the same
+                new_motif = SongFile(sf.name, data, sf.Fs)
+                new_motif.start = start_time
+                
+                motifs.append(new_motif)
+                in_motif = False
+                sf.logger.debug('Motif for %s end at %0.4f', sf.name, t)
+
+        
+        #Check that lengths satisfy the requirements
+        return [m for m in motifs if min_dur<=m.length<=max_dur]
+    
+    def time_to_idx(self, t):
+        return int(t * self.Fs)
     
     def __str__(self):
-        return '{:s}_{:04d}_{:04d}'.format(self.name, self.start, self.length+self.start)
-    
-    def __repr__(self):
-        return str(self)
+        return '{:s}_{:04f}_{:04f}'.format(self.name, self.start, self.length+self.start)
 
     def export(self, destination, filename=None):
         """Exports data in WAV format

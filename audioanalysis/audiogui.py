@@ -130,6 +130,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':15, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
+                       'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
                        }
             
         self.analyzer = AudioAnalyzer(**self.params)
@@ -430,7 +431,15 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
     @QtCore.pyqtSlot(str)    
     def find_motifs(self, mode):
-        pass
+        if mode == 'all':
+            for sf in self.analyzer.songs:
+                self.analyzer.motifs += SongFile.find_motifs(sf, **self.params)
+                
+            self.update_table('motifs')
+            
+        if mode == 'current':
+            self.analyzer.motifs += SongFile.find_motifs(self.analyzer.active_song, **self.params)
+            self.update_table('motifs')
        
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
