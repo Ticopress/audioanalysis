@@ -19,11 +19,12 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 """
+import sys, os
 
 from scipy import signal
 from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
 import numpy as np
-import logging, sys, time, os
+import logging
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
@@ -114,15 +115,7 @@ class AudioAnalyzer():
         """Select a SongFile from the current list and designate one as the 
         active SongFile
         """
-            
-        try:
-            idx = self.songs.index(sf)
-        except IndexError:
-            self.logger.info('Songfile %s added to list', sf.name)
-            idx = len(self.songs)
-            self.songs.append(sf)
-        
-        self.active_song = self.songs[idx]
+        self.active_song = sf
         
         try:
             self.Sxx = self.active_song.Sxx
@@ -395,7 +388,7 @@ class SongFile:
         Inputs: 
             filename: a .WAV file path in filename
             split: a length, in seconds, at which the audio file should be split.
-                Defaults to 600 seconds, or 10 minutes, if not specified
+                Defaults to 300 seconds, or 5 minutes, if not specified
             downsampling: the integer ratio by which the song should be sampled
         
         Returns an array of SongFiles"""
@@ -440,11 +433,59 @@ class SongFile:
             
         return sfs
     
-    def __str__(self):
-        return '{:s}_{:04d}_{:04d}'.format(self.name, self.start, self.length+self.start)
+    @classmethod
+    def find_motifs(cls, sf, **params):
+        """Cut motifs from a classified songfile and build songfiles from them
+        
+        This method takes a SongFile, assumes it has already been correctly
+        classified and therefore has a classification that is not None, it scans
+        through that classification and determines (with some resistance to 
+        noise) the regions where there appears to be a motif.
+        
+        Note: motifs are indicated anywhere the classification is nonzero.
+        """
+        
+        min_dur=params.get('min_dur',0)
+        max_dur=params.get('max_dur', float('inf'))
+        smooth_gap=params.get('smooth_gap', 0)
+            
+        motifs = []
+        
+        try:
+            times = sf.time[np.nonzero(sf.classification)]
+        except TypeError:
+            sf.logger.info('Song %s does not have a classification, cannot '
+                    'find motifs', sf.name)
+            return []
+        
+        in_motif = False
+        
+        for i, t in enumerate(times):
+            if not in_motif:
+                start_time = t
+                in_motif = True
+                sf.logger.debug('Motif for %s start at %0.4f', sf.name, start_time)
+            
+            if in_motif and (i==len(times)-1 or times[i+1]-t > smooth_gap):
+                data = sf.data[sf.time_to_idx(start_time):sf.time_to_idx(t)]
+                #name and Fs are the same
+                new_motif = SongFile(sf.name, data, sf.Fs)
+                new_motif.start = start_time
+                
+                motifs.append(new_motif)
+                in_motif = False
+                sf.logger.debug('Motif for %s end at %0.4f', sf.name, t)
+
+        
+        #Check that lengths satisfy the requirements
+        return [m for m in motifs if min_dur<=m.length<=max_dur]
     
-    def __repr__(self):
-        return str(self)
+    def time_to_idx(self, t):
+        return int(t * self.Fs)
+    
+    def __str__(self):
+        return '{:s}_{:04f}_{:04f}'.format(
+                self.name, self.start, self.length+self.start)
 
     def export(self, destination, filename=None):
         """Exports data in WAV format
@@ -457,36 +498,3 @@ class SongFile:
             filename = str(self) + '.wav'
         
         fullpath = os.path.join(destination, filename)
-        
-        pass
-    
-    
-class SongMotif(SongFile):
-    """A special class for storing a short motif
-    
-    This class differs from a SongFile only in that:
-        1) it cannot be loaded from a file.  Instead, it is initialized with 
-            all of its data (class, entropy, power, even Sxx spectrogram)
-        2) they must be shorter than 5 seconds
-        3) they retain their spectrogram - hence the length limit
-        
-    Basically, this is a convenience class for data storage, not much else
-    """
-    
-    def __init__(self, name, data, Fs, time, classes, entropy, power, Sxx):
-        """creates a new SongMotif from all of the motif's data"""  
-        self.name = name
-        
-        self.data = data
-        self.Fs = Fs
-        
-        self.time = time
-        self.classification = classes
-        
-        self.entropy = entropy
-        self.power = power
-        
-        self.Sxx = Sxx
-        
-        self.start = min(time)
-        self.length = max(time)-self.start
