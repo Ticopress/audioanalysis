@@ -111,6 +111,12 @@ class AudioAnalyzer():
         
         return l
     
+    def reconstitute_nn(self, folder):
+        self.logger.info('Reconstituting the neural net found in %s', folder)
+    
+    def export_nn(self, folder):
+        self.logger.info('Saving neural net model and weights to %s', folder)
+        
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
         active SongFile

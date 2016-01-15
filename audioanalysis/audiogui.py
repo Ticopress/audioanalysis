@@ -83,7 +83,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Set up menu callbacks
         self.action_load_files.triggered.connect(self.select_wav_files)
         self.action_load_folder.triggered.connect(self.select_wav_folder)
-        self.action_load_nn.triggered.connect(self.select_neural_net_file)
+        self.action_load_nn.triggered.connect(self.select_neural_net_folder)
         
         self.action_new_nn.triggered.connect(self.create_new_neural_net)
         
@@ -229,11 +229,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         namecol = QtGui.QTableWidgetItem(sf.name)
 
         m, s = divmod(sf.start, 60)
-        
         startcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
         
         m, s = divmod(sf.length, 60)
-        
         lengthcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
         
         return [namecol, startcol, lengthcol]
@@ -251,16 +249,16 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.show_active_song()
     
     @QtCore.pyqtSlot()      
-    def select_neural_net_file(self):
-        """Load one or more wav files as SongFiles"""
-        self.logger.debug('Clicked the file select button')
+    def select_neural_net_folder(self):
+        """Load a folder containing the files necessary to specify a neural net"""
+        self.logger.debug('Clicked the NN load button')
               
-        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', 
-                '/home', 'Neural Net files (*.nn)')
-        if file_names:
-            self.load_wav_files(file_names)
+        folder = str(QtGui.QFileDialog.getExistingDirectory(parent=self, 
+                caption='Select a folder containing the required NN files'))
+        if folder:
+            self.analyzer.nn = self.analyzer.reconstitute_nn(folder)
         else:
-            self.logger.debug('Cancelled file select')
+            self.logger.debug('Cancelled loading of neural net')
     
     @QtCore.pyqtSlot()              
     def create_new_neural_net(self):
@@ -272,7 +270,18 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     @QtCore.pyqtSlot()          
     def save_neural_net(self):
         """Save the analyzer's current neural net to a file to avoid training"""
-        pass
+        self.logger.debug('Clicked the NN save button')
+              
+        fullpath = str(QtGui.QFileDialog.getSaveFileName(parent=self, 
+                caption='Enter folder name to save the required NN files'))
+        
+        if fullpath:
+            self.logger.info('Saving NN to %s', fullpath)
+            if not os.path.exists(fullpath):
+                os.makedirs(fullpath)
+            self.analyzer.export_nn(fullpath)
+        else:
+            self.logger.debug('Cancelled save neural net')
 
     @QtCore.pyqtSlot()              
     def save_motifs(self, mode):
@@ -283,15 +292,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 mf.export(destination=folder_name)
             
         elif mode == 'current':
-            folder_name = QtGui.QFileDialog.getSaveFileName(self, 'Enter motif file name')
-            
-            
-        else:
-            #Get a filename, put it there
-            try:
-                self.analyzer.motifs[mode].export()
-            except TypeError:
-                self.logger.error('Unknown motif export mode, cannot export')
+            file_name = QtGui.QFileDialog.getSaveFileName(self, 'Choose filename and save location')
+            self.analyzer.active_song.export(
+                    destination=os.path.dirname(file_name), 
+                    filename=os.path.basename(file_name)
+                    )
+
 
     @QtCore.pyqtSlot()            
     def click_play_button(self):
