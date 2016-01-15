@@ -19,11 +19,12 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 """
+import sys, os
 
 from scipy import signal
 from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
 import numpy as np
-import logging, sys, os
+import logging
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
@@ -387,7 +388,7 @@ class SongFile:
         Inputs: 
             filename: a .WAV file path in filename
             split: a length, in seconds, at which the audio file should be split.
-                Defaults to 600 seconds, or 10 minutes, if not specified
+                Defaults to 300 seconds, or 5 minutes, if not specified
             downsampling: the integer ratio by which the song should be sampled
         
         Returns an array of SongFiles"""
@@ -453,7 +454,8 @@ class SongFile:
         try:
             times = sf.time[np.nonzero(sf.classification)]
         except TypeError:
-            sf.logger.info('Song %s does not have a classification, cannot find motifs', sf.name)
+            sf.logger.info('Song %s does not have a classification, cannot '
+                    'find motifs', sf.name)
             return []
         
         in_motif = False
@@ -482,7 +484,8 @@ class SongFile:
         return int(t * self.Fs)
     
     def __str__(self):
-        return '{:s}_{:04f}_{:04f}'.format(self.name, self.start, self.length+self.start)
+        return '{:s}_{:04f}_{:04f}'.format(
+                self.name, self.start, self.length+self.start)
 
     def export(self, destination, filename=None):
         """Exports data in WAV format
@@ -495,5 +498,3 @@ class SongFile:
             filename = str(self) + '.wav'
         
         fullpath = os.path.join(destination, filename)
-        
-        pass

@@ -19,8 +19,7 @@ FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
-
-from PyQt4.uic import loadUiType
+import sys, os, time, fnmatch
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import (
@@ -29,12 +28,13 @@ from matplotlib.backends.backend_qt4agg import (
 from matplotlib.backend_bases import cursors
 
 from PyQt4 import QtGui, QtCore
+from PyQt4.QtCore import pyqtSignal
+from PyQt4.uic import loadUiType
 
-import logging, sys, os, pyaudio, time, fnmatch
 import numpy as np
+import logging, pyaudio
 
 from freqanalysis import AudioAnalyzer, SongFile
-from PyQt4.QtCore import pyqtSignal
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
