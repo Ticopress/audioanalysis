@@ -23,6 +23,7 @@ import sys, os
 
 from scipy import signal
 from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
+from scikits.audiolab import Format
 import numpy as np
 import logging
 
@@ -353,7 +354,7 @@ class SongFile:
 
     Instead, this stores the basic song data: Fs, analog signal data"""
     
-    def __init__(self, name, data, Fs):
+    def __init__(self, data, Fs, name='', start=0, length=0):
         self.logger = logging.getLogger('SongFile.logger')
         
         #Values passed into the init
@@ -369,10 +370,12 @@ class SongFile:
         
         
         self.name = name
+        self.start = start
         
-        
-        self.start = 0
-        self.length = len(data)/Fs
+        if length:
+            self.length = length
+        else:
+            self.length = len(self.data)/self.Fs
      
     @property
     def domain(self):
@@ -429,12 +432,9 @@ class SongFile:
         
         for i in range(0, split_count):
             songdata = data[i*nperfile:(i+1)*nperfile]
-            next_sf = cls(os.path.basename(filename), songdata, fs)
-            
-            #override the start/end markers - made from a split file            
-            next_sf.start = int(i*nperfile/fs)
-            next_sf.length = next_sf.start+songdata.shape[0]/fs
-            
+            fname = os.path.splitext(os.path.basename(filename))[0]
+            next_sf = cls(songdata, fs, name=fname, start=int(i*nperfile/fs), length=int(i*nperfile/fs)+songdata.shape[0]/fs)
+                        
             sfs.append(next_sf)
             
         return sfs
@@ -475,8 +475,7 @@ class SongFile:
             if in_motif and (i==len(times)-1 or times[i+1]-t > smooth_gap):
                 data = sf.data[sf.time_to_idx(start_time):sf.time_to_idx(t)]
                 #name and Fs are the same
-                new_motif = SongFile(sf.name, data, sf.Fs)
-                new_motif.start = start_time
+                new_motif = SongFile(data, sf.Fs, name=sf.name, start=start_time)
                 
                 motifs.append(new_motif)
                 in_motif = False
@@ -490,8 +489,8 @@ class SongFile:
         return int(t * self.Fs)
     
     def __str__(self):
-        return '{:s}_{:04f}_{:04f}'.format(
-                self.name, self.start, self.length+self.start)
+        return '{:s}_{:04d}_{:04d}'.format(
+                self.name, int(self.start), int(self.length+self.start))
 
     def export(self, destination, filename=None):
         """Exports data in WAV format
@@ -502,5 +501,15 @@ class SongFile:
         
         if filename is None:
             filename = str(self) + '.wav'
+        elif os.path.splitext(filename)[1] is not '.wav':
+            filename = filename + '.wav'
         
         fullpath = os.path.join(destination, filename)
+        
+        f = SoundFile(fullpath, mode='w', channels=1, samplerate=self.Fs, 
+                format=Format())
+        
+        f.write_frames(self.data)
+
+        
+        

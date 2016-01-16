@@ -255,6 +255,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
               
         folder = str(QtGui.QFileDialog.getExistingDirectory(parent=self, 
                 caption='Select a folder containing the required NN files'))
+        
         if folder:
             self.analyzer.nn = self.analyzer.reconstitute_nn(folder)
         else:
@@ -286,13 +287,15 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     @QtCore.pyqtSlot()              
     def save_motifs(self, mode):
         if mode == 'all':
-            folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
+            folder_name = str(QtGui.QFileDialog.getExistingDirectory(self, 
+                    'Select folder'))
             
             for mf in self.analyzer.motifs:
                 mf.export(destination=folder_name)
             
         elif mode == 'current':
-            file_name = QtGui.QFileDialog.getSaveFileName(self, 'Choose filename and save location')
+            file_name = str(QtGui.QFileDialog.getSaveFileName(self, 
+                    'Choose filename and save location'))
             self.analyzer.active_song.export(
                     destination=os.path.dirname(file_name), 
                     filename=os.path.basename(file_name)
@@ -406,7 +409,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.warning('Missing frequency domain display downsampling ratio')
             f_step = 1
             
-        try:   
+        try:  
+            title = 'Active Song: '+str(self.analyzer.active_song)
             time = self.analyzer.active_song.time[::t_step]
             freq = self.analyzer.active_song.freq[::f_step]
             classification = self.analyzer.active_song.classification[::t_step]
@@ -418,7 +422,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             return
         
         if plot_type == 'spectrogram':
-            self.canvas.display_spectrogram(time, freq, disp_Sxx, **self.params)
+            self.canvas.display_spectrogram(time, freq, disp_Sxx, title=title, **self.params)
         elif plot_type == 'classification':
             show = self.classes_checkbox.isChecked()
             self.canvas.display_classification(time, classification, show=show)
@@ -734,6 +738,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         except KeyError:
             self.logger.warning('No parameter "vmax", using data maximum')
             vmax = np.max(Sxx)
+            
+        title = params.get('title', '')
         
         halfbin_time = (t[1] - t[0]) / 2.0
         halfbin_freq = (f[1] - f[0]) / 2.0
@@ -751,6 +757,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
                 vmax=vmax
                 )
         
+        ax.set_title(title, loc='left')
         ax.axis('tight')
 
         self.set_domain(self.extent[0:2])
