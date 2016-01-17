@@ -20,13 +20,15 @@ The software is in the initial stages of development.
 - I have subclassed the NavigationToolbar2 and customized several navigation functions to make them convenient for spectrogram navigation
 - I have implemented Model subclasses for storing song data
 - I have implemented efficient chunking of large datasets and efficient data display
+- I have implemented all menu callbacks in the final GUI, including import and export of motifs and trained neural nets
 
 Short-Term Goals
 ----------------
 
-- Small updates to UI handling for setting classifications before training
-- Implement calculation of entropy and amplitude in backend
-- Structure a neural net using Keras.io and the write utilities I need to send data to it for training
+- Implement training of the neural net from a single manually classified songfile
+- Figure out how to build the application with all dependencies in a way that actually will run and not yield annoying ImportErrors
+- Implement classification of a group of songfiles with a trained neural net
+- Extra cleanup/feature-adds: right-click delete songfiles or motifs from the list, a 'deactivate/clear' function in SpectrogramCanvas, ability to manually split motifs, more intelligent motif splitting/detection
 
 Copyright and License
 ---------------------
