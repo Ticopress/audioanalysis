@@ -14,7 +14,7 @@ version.
 
 Audio Analysis is distributed in the hope that it will be useful, but WITHOUT 
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS 
-FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+FOR A PARTICULAR PURPOSE. Seedea the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
@@ -126,11 +126,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 'display_threshold':-400, 
-                       'split':600, 'vmin':-90, 'vmax':-20, 'nfft':512, 
+                       'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':15, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
+                       'min_freq':440.0
                        }
             
         self.analyzer = AudioAnalyzer(**self.params)
@@ -180,8 +181,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
         self.logger.info('selected %s', str(folder_name))
         if folder_name:
-            pass
-            self.load_wav_files(self.find_files(str(folder_name), '*.wav'))
+            files = self.find_files(str(folder_name), '*.wav') + self.find_files(str(folder_name), '*.WAV')
+            self.load_wav_files(files)
         else:
             self.logger.debug('Cancelled file select')
 
@@ -416,7 +417,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             classification = self.analyzer.active_song.classification[::t_step]
             entropy = self.analyzer.active_song.entropy[::t_step]
             power = self.analyzer.active_song.power[::t_step]
-            disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
+            disp_Sxx = 10*np.log10(np.flipud(self.analyzer.Sxx[::t_step, ::f_step]))
         except AttributeError:
             self.logger.warning('No active song, cannot display plot %s', plot_type)
             return

@@ -22,10 +22,12 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 import sys, os
 
 from scipy import signal
-from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
-from scikits.audiolab import Format
+from scipy.signal import butter, lfilter, freqz
+
+import scipy.io.wavfile
 import numpy as np
 import logging
+
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
@@ -113,11 +115,12 @@ class AudioAnalyzer():
         return l
     
     def reconstitute_nn(self, folder):
-        self.logger.info('Reconstituting the neural net found in %s', folder)
+        pass
     
     def export_nn(self, folder):
-        self.logger.info('Saving neural net model and weights to %s', folder)
-        
+        with open(os.path.join(folder, 'nn_model.json'), 'w') as outfile:
+            outfile.write(self.nn.to_json()) 
+            
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
         active SongFile
@@ -154,6 +157,14 @@ class AudioAnalyzer():
             
         nperseg = time_window_ms * sf.Fs / 1000
         
+        try:
+            min_freq = params['min_freq']
+            self.logger.info('Highpass filter %g Hz applied', min_freq)
+            data = AudioAnalyzer.butter_highpass_filter(sf.data, min_freq, sf.Fs, 5)
+        except KeyError:
+            data = sf.data
+            self.logger.info('No highpass filter applied')
+        
         if nfft < nperseg:
             nfft = 2**np.ceil(np.log2(nperseg))
             self.logger.warning('NFFT (%d) cannot be less than the number of '
@@ -168,7 +179,7 @@ class AudioAnalyzer():
                     i*process_chunk, (i+1)*process_chunk)
             
             (freq, time_part, Sxx_part) = signal.spectrogram(
-                    sf.data[i*nchunk:(i+1)*nchunk], 
+                    data[i*nchunk:(i+1)*nchunk], 
                     fs=sf.Fs,
                     nfft=nfft,  #number of bins; must be 2^z
                     nperseg=nperseg, #width in time domain
@@ -190,24 +201,42 @@ class AudioAnalyzer():
         self.logger.debug('STFT dimensions %s', str(Sxx.shape))               
 
         if sf.classification is None:
-            sf.classification = np.zeros(time_list.size)
-            
+            sf.classification = np.zeros(time_list.size) 
+        
         sf.time = time_list
         sf.freq = freq
         sf.entropy = self.calc_entropy(Sxx)
         sf.power = self.calc_power(Sxx)
         
-        return 10*np.log10(Sxx)
+        return Sxx
     
-    def calc_entropy(self, Sxx):
+    @staticmethod
+    def butter_highpass(cutoff, fs, order=5):
+        nyq = 0.5 * fs
+        normal_cutoff = cutoff / nyq
+        b, a = butter(order, normal_cutoff, btype='high', analog=False)
+        return b, a
+
+    @staticmethod
+    def butter_highpass_filter(data, cutoff, fs, order=5):
+        b, a = AudioAnalyzer.butter_highpass(cutoff, fs, order=order)
+        y = lfilter(b, a, data)
+        return y
+    
+    @staticmethod
+    def calc_entropy(Sxx):
         """Calculates the Wiener entropy (0 to 1) for each time slice of Sxx"""
         n = Sxx.shape[0]
         return np.exp(np.sum(np.log(Sxx),0)/n) / (np.sum(Sxx, 0)/n)
+    
     
     @staticmethod
     def calc_power(Sxx):
         """Calculates average signal power"""
         return np.sum(Sxx, 0) / Sxx.shape[0]
+    
+    def calc_max_power(self, Sxx):
+        return np.max(Sxx, 0)
  
     @staticmethod
     def class_integer_to_vectorized(int_classification):
@@ -391,7 +420,7 @@ class SongFile:
         return max(self.classification)+1
         
     @classmethod
-    def load(cls, filename, split=300, downsampling=None):
+    def load(cls, filename, split=600, downsampling=None):
         """Loads a file, splitting it into multiple SongFiles if necessary
         
         Inputs: 
@@ -402,9 +431,9 @@ class SongFile:
         
         Returns an array of SongFiles"""
         
-        f = SoundFile(filename, mode='r')
-        data = f.read_frames(f.nframes, dtype=np.float32)
-        fs = float(f.samplerate)
+        rate, data = scipy.io.wavfile.read(filename)
+        fs = np.float64(rate)
+        data = np.float32(data) / np.max(data)
                 
         if data.ndim is not 1:
             data = data[:, 0]
@@ -420,7 +449,7 @@ class SongFile:
             nperfile = data.shape[0]
             split_count = 1
             
-        if nperfile / fs > 300:
+        if nperfile / fs > 600:
             logging.getLogger('SongFile.Loading.logger').warning(
                     'Current song is %d seconds long and is not'
                     ' split.  This may cause substantial memory use and '
@@ -489,7 +518,7 @@ class SongFile:
         return int(t * self.Fs)
     
     def __str__(self):
-        return '{:s}_{:04d}_{:04d}'.format(
+        return '{:s}_{:03d}_{:03d}'.format(
                 self.name, int(self.start), int(self.length+self.start))
 
     def export(self, destination, filename=None):
@@ -506,10 +535,7 @@ class SongFile:
         
         fullpath = os.path.join(destination, filename)
         
-        f = SoundFile(fullpath, mode='w', channels=1, samplerate=self.Fs, 
-                format=Format())
-        
-        f.write_frames(self.data)
+        scipy.io.wavfile.write(fullpath, int(self.Fs), self.data)
 
         
         
