@@ -369,7 +369,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         This function assumes all preprocessing has been completed and merely
         looks at the state of the model and displays it
         """
-                
+        self.logger.info('Beginning plot of spectrogram... please wait')  
         for p in ['spectrogram', 'classification', 'entropy', 'power']:
             self.plot(p)
         

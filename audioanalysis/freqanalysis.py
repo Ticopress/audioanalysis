@@ -237,149 +237,10 @@ class AudioAnalyzer():
         n = Sxx.shape[0]
         return np.exp(np.sum(np.log(Sxx),0)/n) / (np.sum(Sxx, 0)/n)
     
-    
     @staticmethod
     def calc_power(Sxx):
         """Calculates average signal power"""
         return np.sum(Sxx, 0) / Sxx.shape[0]
-    
-    def calc_max_power(self, Sxx):
-        return np.max(Sxx, 0)
- 
-    @staticmethod
-    def class_integer_to_vectorized(int_classification):
-        """DEPRECATED.  Exists in np_utils, I think
-        
-        Convert the integer class values to a one-hot vector encoding
-        
-        The class NeuralNetwork requires a one-hot encoding for output state.
-        That is, if there are three states (0,1,2) possible, it expects that
-        these be represented as three 3x1 ndarrays [1 0 0], [0 1 0], and 
-        [0 0 1].  It will also accept fuzzy representations to indicate
-        uncertainty of state, for instance [0.9 0 0.43] is also a valid
-        state encoding to a NeuralNetwork indicating a high probability of
-        state 0, with small possibility of state 2. 
-        
-        This method, however, converts an array of integer state labels to the
-        respective one-hot encoding and returns that ndarray
-        """
-        num_categories = np.max(int_classification) + 1
-        
-        nn_vectors = np.zeros((num_categories, int_classification.size))
-        
-        for idx, i in enumerate(int_classification):
-            nn_vectors[i, idx] = 1
-            
-        return nn_vectors
-    
-    @staticmethod
-    def class_vectorized_to_integer(nn_vector_classifications, **kwargs):
-        """Convert a classification ndarray created by a NeuralNetwork to a
-        set of integer classification labels
-        
-        This method is not yet implemented, and will require advanced
-        processing techniques.  The NN is not required to return a clear
-        classification, and in fact is expected to make small mistakes and
-        to return 'spiky' data.  This method will parse the spiky data and
-        smooth it out, but that will require knowledge of the context of 
-        each data point, which the NN does not use.
-        
-        It may be enough to simply use the weighted average of the classes of
-        neighboring points - however, that may be insufficient. 
-        
-        Inputs:
-            nn_vector_classifications: the ndarray returned by a trained NN
-                attempting to classify a spectrogram
-        Keyword Arguments
-            window_type: a string describing the windowing function to be used.
-                Defaults to 'hamming'
-            window_size: a string describing the width of window to be used.
-                Defaults to 40
-            beta: an argument for window window_type 'kaiser', defaults to 14, with a
-                valid range of 0<beta<infinity
-            sigma: an argument for window window_type 'gaussian', defaults to 0.4,
-                with a valid range 0<sigma<0.5
-        """
-        
-        window_type = kwargs.get('window_type', 'hamming')
-        N = kwargs.get('window_size', 40)
-        
-        length = nn_vector_classifications.shape[1]
-        new_classification = np.zeros(length)
-
-        new_kwargs = {'beta':kwargs.get('beta', 14), 'sigma':kwargs.get('sigma', 0.4)}
-
-        for idx in range(length):
-            side = ''
-            left = idx - N/2
-            right = idx + N/2
-            if left < 0:
-                left = 0
-                side = 'right'
-            if right > length-1:
-                right = length-1
-                side = 'left'
-            
-            subset = nn_vector_classifications[:, left:right:1]
-            windowed = AudioAnalyzer.apply_window(subset, window_type, side=side, 
-                    **new_kwargs)
-            windowed_average = windowed.mean(1)
-            new_classification[idx] = windowed_average.argmax()
-        
-        return new_classification
-    
-    def class_to_motifs(self):
-        """Take a vector of integer classifications and determine start and
-        end times for motifs.
-        """
-        pass
-    
-    @staticmethod
-    def apply_window(data, window_type, **kwargs):
-        """Takes a window from a set of standard windows and applies it to a
-        classification (in integer or vectorized format).
-        
-        Inputs:
-            data: a numpy ndarray, either 1d or 2d
-            window: a string representing the window_type of window.  Must be one of
-                'gaussian', 'blackman', 'hanning', 'hamming', or 'kaiser'
-        Keyword Arguments
-            beta: a parameter for kaiser windows
-            sigma: a parameter for gaussian windows
-            side: a string determining if the window is one-sided or not
-        """
-        
-        if data.ndim == 1:
-            N = data.size
-        else:
-            N = data.shape[1]
-
-        side = kwargs.get('side', '')
-        if side:
-            N = 2*N
-            
-        n = np.array(range(N))
-        coeffs = np.zeros(N)
-        coeffs[(N-1)/2] = 1
-        if window_type == 'gaussian':
-            sigma = kwargs.get('sigma', 0.25)
-            coeffs = np.exp(-0.5 * ((n - 0.5*(N-1))/(sigma * 0.5*(N-1)))**2)
-        if window_type == 'blackman':
-            coeffs = np.blackman(N)
-        if window_type == 'hamming':
-            coeffs = np.hamming(N)
-        if window_type == 'hanning':
-            coeffs = np.hanning(N)
-        if window_type == 'kaiser':
-            beta = kwargs.get('beta', 14)
-            coeffs = np.kaiser(N, beta)
-        
-        if side=='left':
-            coeffs = coeffs[:N/2]
-        if side=='right':
-            coeffs = coeffs[N/2:]
-                
-        return np.multiply(coeffs, data)
 
 class SongFile:
     """Class for storing data related to each song
@@ -391,7 +252,18 @@ class SongFile:
 
     Instead, this stores the basic song data: Fs, analog signal data"""
     
-    def __init__(self, data, Fs, name='', start=0, length=0):
+    def __init__(self, data, Fs, name='', start=0):
+        """Create a SongFile for storing signal data
+        
+        Inputs:
+            data: a numpy array with time series data.  For use with PyAudio,
+                ensure the format of data is the same as the player
+            Fs: sampling frequency, ideally a float
+        Keyword Arguments:
+            name: a string identifying where this SongFile came from
+            start: a value in seconds indicating that the SongFile's data does
+                not come from the start of a longer signal
+        """
         self.logger = logging.getLogger('SongFile.logger')
         
         #Values passed into the init
@@ -409,10 +281,7 @@ class SongFile:
         self.name = name
         self.start = start
         
-        if length:
-            self.length = length
-        else:
-            self.length = len(self.data)/self.Fs
+        self.length = len(self.data)/self.Fs
      
     @property
     def domain(self):
@@ -470,7 +339,7 @@ class SongFile:
         for i in range(0, split_count):
             songdata = data[i*nperfile:(i+1)*nperfile]
             fname = os.path.splitext(os.path.basename(filename))[0]
-            next_sf = cls(songdata, fs, name=fname, start=int(i*nperfile/fs), length=int(i*nperfile/fs)+songdata.shape[0]/fs)
+            next_sf = cls(songdata, fs, name=fname, start=int(i*nperfile/fs))
                         
             sfs.append(next_sf)
             
