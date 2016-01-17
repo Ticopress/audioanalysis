@@ -40,6 +40,15 @@ In order to be able to run python -m audioanalysis, all Qt packages must be
 from setuptools import setup
 import os
 
+from pip.req import parse_requirements
+
+# parse_requirements() returns generator of pip.req.InstallRequirement objects
+install_reqs = parse_requirements('requirements.txt')
+
+# reqs is a list of requirement
+# e.g. ['django==1.5.1', 'mezzanine==1.4.6']
+reqs = [str(ir.req) for ir in install_reqs]
+
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
@@ -52,7 +61,7 @@ setup(name='audioanalysis',
       url='https://github.com/jpalpant/jarvis-lab-audio-analysis',
       license='GPLv3',
       packages=['audioanalysis'],
-      install_requires=['logging', 'numpy', 'scipy', 'matplotlib', 'pyaudio'],
+      install_requires=reqs,
       long_description=read('README.txt'),
       entry_points = {
         'console_scripts': ['audioanalsys=audioanalysis.__main__:run_as_executable'],
