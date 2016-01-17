@@ -41,7 +41,10 @@ class AudioAnalyzer():
 
     
     def __init__(self, **params):
-        """Constructor docstrings goes here TODO
+        """Create an AudioAnalyzer
+        
+        All keyword arguments are gathered and stored in the instance's 
+        self.params.  Keyword arguments relate to STFT parameters, 
         """
         self.logger = logging.getLogger('AudioAnalyzer.logger')
         
@@ -58,6 +61,15 @@ class AudioAnalyzer():
         self.nn = None
     
     def build_neural_net(self, **params):
+        """Construct and compile a Keras neural net
+        
+        Keyword Arguments:
+            layers: a list of layerspecs, as defined in make_layer
+            loss: a string specifying a Keras loss function.  Defaults to 
+                'categorical_crossentropy'
+            optimizer: a string specifying a Keras optimizer.  Defaults to 'sgd'
+        """
+        
         nn = Sequential()
         
         layers = params.get('layers', [])
@@ -92,9 +104,18 @@ class AudioAnalyzer():
         
         nn.compile(loss=loss, optimizer=optimizer)
         self.logger.info('Successfully constructed a new neural net')
+        
         return nn
             
     def make_layer(self, layerspec):
+        """Build a layer from a dictionary specifying the layer parameters
+        
+        The layerspec should contain the following entries:
+            type: a class name
+            args: a tuple of arguments for the class's __init__
+            kwargs: a dictionary of kwargs for the class's __init__
+        """
+        
         name = layerspec.get('type')
         self.logger.info('Building layer specified by %s', str(layerspec))
 
@@ -115,6 +136,8 @@ class AudioAnalyzer():
         return l
     
     def reconstitute_nn(self, folder):
+        """Load a neural net from json and h5 files exported with export_nn"""
+        
         self.logger.info('Loading neural net model')
         model = model_from_json(open(os.path.join(folder,'nn_model.json')).read())
         self.logger.info('Loading neural net weights')
@@ -124,6 +147,12 @@ class AudioAnalyzer():
         return model
     
     def export_nn(self, folder):
+        """Export the analyzer's neural net to the given folder
+        
+        Creates two files, one a json string describing the model and one an
+        HDF5 file storing the model's weights
+        """
+        
         with open(os.path.join(folder, 'nn_model.json'), 'w') as outfile:
             outfile.write(self.nn.to_json()) 
             
@@ -217,6 +246,7 @@ class AudioAnalyzer():
         sf.power = self.calc_power(Sxx)
         
         return Sxx
+    
     
     @staticmethod
     def butter_highpass(cutoff, fs, order=5):
