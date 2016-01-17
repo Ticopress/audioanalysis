@@ -51,6 +51,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         """
         #Initialization of GUI from Qt Designer
+        app = QtGui.QApplication(sys.argv)
         super(AudioGUI, self).__init__()
         self.setupUi(self)
         
@@ -60,8 +61,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
-        sys.stdout = OutLog(self.console, sys.stdout)
-        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        #sys.stdout = OutLog(self.console, sys.stdout)
+        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
         logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
@@ -83,7 +84,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Set up menu callbacks
         self.action_load_files.triggered.connect(self.select_wav_files)
         self.action_load_folder.triggered.connect(self.select_wav_folder)
-        self.action_load_nn.triggered.connect(self.select_neural_net_folder)
+        self.action_load_nn.triggered.connect(self.load_neural_net)
         
         self.action_new_nn.triggered.connect(self.create_new_neural_net)
         
@@ -141,7 +142,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.show()
         
         self.logger.info('Finished with initialization')
-    
+        sys.exit(app.exec_())
     
     def set_canvas(self, canvas, loc):
         """Set the SpectrogramCanvas for this GUI
@@ -250,7 +251,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.show_active_song()
     
     @QtCore.pyqtSlot()      
-    def select_neural_net_folder(self):
+    def load_neural_net(self):
         """Load a folder containing the files necessary to specify a neural net"""
         self.logger.debug('Clicked the NN load button')
               
@@ -258,7 +259,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 caption='Select a folder containing the required NN files'))
         
         if folder:
-            self.analyzer.nn = self.analyzer.reconstitute_nn(folder)
+            try:
+                net = self.analyzer.reconstitute_nn(folder)
+            except (IOError, KeyError):
+                self.logger.error('No valid neural net in that file')
+            else:
+                self.analyzer.nn = net
         else:
             self.logger.debug('Cancelled loading of neural net')
     
@@ -1240,10 +1246,7 @@ class OutLog:
  
            
 def main():    
-    app = QtGui.QApplication(sys.argv)
     main = AudioGUI()
     
-    sys.exit(app.exec_())
-
 if __name__ == '__main__':
     main()

@@ -20,18 +20,18 @@ You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 """
 import sys, os
+import logging
 
 from scipy import signal
-from scipy.signal import butter, lfilter, freqz
+from scipy.signal import butter, lfilter
 
 import scipy.io.wavfile
 import numpy as np
-import logging
-
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
-from keras.models import Sequential
+from keras.models import Sequential, model_from_json
+
 
 
 class AudioAnalyzer():
@@ -115,11 +115,19 @@ class AudioAnalyzer():
         return l
     
     def reconstitute_nn(self, folder):
-        pass
+        self.logger.info('Loading neural net model')
+        model = model_from_json(open(os.path.join(folder,'nn_model.json')).read())
+        self.logger.info('Loading neural net weights')
+        model.load_weights(os.path.join(folder,'nn_weights.h5'))
+        self.logger.info('Done loading neural net')
+
+        return model
     
     def export_nn(self, folder):
         with open(os.path.join(folder, 'nn_model.json'), 'w') as outfile:
             outfile.write(self.nn.to_json()) 
+            
+        self.nn.save_weights(os.path.join(folder, 'nn_weights.h5'))
             
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
