@@ -28,13 +28,12 @@ Short-Term Goals
 - Implement training of the neural net from a single manually classified songfile
 - Figure out how to build the application with all dependencies in a way that actually will run and not yield annoying ImportErrors
 - Implement classification of a group of songfiles with a trained neural net
-- Extra cleanup/feature-adds: right-click delete songfiles or motifs from the list, a 'deactivate/clear' function in SpectrogramCanvas, ability to manually split motifs, more intelligent motif splitting/detection
+- Extra cleanup/feature-adds: right-click delete songfiles or motifs from the list, a 'deactivate/clear' function in SpectrogramCanvas, ability to manually split motifs, more intelligent motif splitting/detection, control over parameters (especially filtering and vmin/vmax), multithreaded time-consuming processes to free up the GUI thread for updates
 
 Copyright and License
 ---------------------
 
 For the complete copyright and licensing information see LICENSE
-
 
 ----------------------------------------------
 Copyright 2015 Justin Palpant

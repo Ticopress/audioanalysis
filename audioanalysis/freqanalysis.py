@@ -23,14 +23,13 @@ import sys, os
 import logging
 
 from scipy import signal
-from scipy.signal import butter, lfilter
-
 import scipy.io.wavfile
 import numpy as np
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
 from keras.models import Sequential, model_from_json
+from keras.utils import np_utils
 
 
 
@@ -157,6 +156,31 @@ class AudioAnalyzer():
             outfile.write(self.nn.to_json()) 
             
         self.nn.save_weights(os.path.join(folder, 'nn_weights.h5'))
+    
+    def train(self):
+        """Using the currently active song, train the neural net"""
+        num_per_class = self.params.get('train_per_class', 1000)
+        nb_epochs = self.params.get('epochs', 1)
+        batch_size = self.params.get('batch_size', 16)
+        nb_classes = self.active_song.num_classes
+        
+        all_indices = np.ndarray(0)
+        
+        if self.active_song.classification is not None:
+            for class_val in np.unique(self.active_song.classification):
+                class_indices = np.where(self.active_song.classification==class_val)
+                
+                #Either downsample or upsample class indices
+                
+                all_indices=np.hstack((all_indices, class_indices))
+            
+        all_indices.sort()
+        
+        train_classes = self.active_song.classification[all_indices]
+        train_data = self.Sxx[:, all_indices]
+        
+        train_classes = np_utils.to_categorical(train_classes, nb_classes)
+        
             
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
@@ -167,9 +191,9 @@ class AudioAnalyzer():
         try:
             self.Sxx = self.active_song.Sxx
         except AttributeError:
-            self.Sxx = self.process(self.active_song, **self.params)
+            self.Sxx = self.process(self.active_song)
     
-    def process(self, sf, **params):
+    def process(self, sf):
         """Take a songfile and using its data, create the processed statistics
         
         This method both updates the data stored in the SongFile (for those
@@ -177,10 +201,10 @@ class AudioAnalyzer():
         the SongFile.  You must catch the returned value and save it, it is not
         written to self.Sxx by default
         """
-        time_window_ms = params.get('fft_time_window_ms', 10)
-        time_step_ms = params.get('fft_time_step_ms', 2)
-        nfft = params.get('nfft', 512)
-        process_chunk = params.get('process_chunk_s', 15)
+        time_window_ms = self.params.get('fft_time_window_ms', 10)
+        time_step_ms = self.params.get('fft_time_step_ms', 2)
+        nfft = self.params.get('nfft', 512)
+        process_chunk = self.params.get('process_chunk_s', 15)
         
         noverlap = (time_window_ms - time_step_ms)* sf.Fs/1000
         noverlap = noverlap if noverlap > 0 else 0
@@ -195,7 +219,7 @@ class AudioAnalyzer():
         nperseg = time_window_ms * sf.Fs / 1000
         
         try:
-            min_freq = params['min_freq']
+            min_freq = self.params['min_freq']
             self.logger.info('Highpass filter %g Hz applied', min_freq)
             data = AudioAnalyzer.butter_highpass_filter(sf.data, min_freq, sf.Fs, 5)
         except KeyError:
@@ -252,13 +276,13 @@ class AudioAnalyzer():
     def butter_highpass(cutoff, fs, order=5):
         nyq = 0.5 * fs
         normal_cutoff = cutoff / nyq
-        b, a = butter(order, normal_cutoff, btype='high', analog=False)
+        b, a = signal.butter(order, normal_cutoff, btype='high', analog=False)
         return b, a
 
     @staticmethod
     def butter_highpass_filter(data, cutoff, fs, order=5):
         b, a = AudioAnalyzer.butter_highpass(cutoff, fs, order=order)
-        y = lfilter(b, a, data)
+        y = signal.lfilter(b, a, data)
         return y
     
     @staticmethod
