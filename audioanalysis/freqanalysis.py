@@ -30,6 +30,7 @@ import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
 from keras.models import Sequential, model_from_json
 from keras.utils import np_utils
+from sklearn.cross_validation import train_test_split
 
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
@@ -194,6 +195,11 @@ class AudioAnalyzer():
         Y_train = np_utils.to_categorical(Y_train, nb_classes)
     
     
+        X_train, X_test, Y_train, Y_test = train_test_split(
+                X_train, Y_train,
+                test_size=validation_split,
+                )
+    
         self.logger.info('X_train shape %s', str(X_train.shape))
         self.logger.info('Y_train shape: %s', str(Y_train.shape))
         
@@ -202,7 +208,14 @@ class AudioAnalyzer():
                 
         self.logger.info('Begin training process: ')
     
-        self.nn.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epoch, show_accuracy=True, verbose=1, validation_split=validation_split)
+        self.nn.fit(
+                X_train, Y_train, 
+                batch_size=batch_size, 
+                nb_epoch=nb_epoch, 
+                show_accuracy=True, 
+                verbose=1, 
+                validation_data=(X_test, Y_test)
+                )
 
 
     def set_active(self, sf):
