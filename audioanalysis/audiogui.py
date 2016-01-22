@@ -64,7 +64,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -120,7 +120,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
-                {'type':'Dense', 'args':(128,)},
+                {'type':'Dense', 'args':(64,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
@@ -129,11 +129,13 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'freq_downsample_disp':1, 'display_threshold':-400, 
                        'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
-                       'process_chunk_s':15, 'layers':defaultlayers, 
+                       'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
-                       'min_freq':440.0
+                       'min_freq':440.0, 'train_per_class':7500, 'epochs':3,
+                       'batch_size':50, 'validation_split':0.25
                        }
+        
             
         self.analyzer = AudioAnalyzer(**self.params)
         self.player = pyaudio.PyAudio()
@@ -260,7 +262,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         if folder:
             try:
-                net = self.analyzer.reconstitute_nn(folder)
+                net = self.analyzer.load_neural_net(folder)
             except (IOError, KeyError):
                 self.logger.error('No valid neural net in that file')
             else:
@@ -274,6 +276,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
         
         #then, train it
+        self.analyzer.train_neural_net()
     
     @QtCore.pyqtSlot()          
     def save_neural_net(self):
@@ -287,7 +290,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.info('Saving NN to %s', fullpath)
             if not os.path.exists(fullpath):
                 os.makedirs(fullpath)
-            self.analyzer.export_nn(fullpath)
+            self.analyzer.export_neural_net(fullpath)
         else:
             self.logger.debug('Cancelled save neural net')
 

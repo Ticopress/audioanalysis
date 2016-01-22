@@ -31,8 +31,6 @@ import keras.layers.convolutional as convlayers
 from keras.models import Sequential, model_from_json
 from keras.utils import np_utils
 
-
-
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
@@ -68,7 +66,7 @@ class AudioAnalyzer():
                 'categorical_crossentropy'
             optimizer: a string specifying a Keras optimizer.  Defaults to 'sgd'
         """
-        
+        self.logger.info('Constructing parameterized neural network')
         nn = Sequential()
         
         layers = params.get('layers', [])
@@ -134,8 +132,8 @@ class AudioAnalyzer():
         
         return l
     
-    def reconstitute_nn(self, folder):
-        """Load a neural net from json and h5 files exported with export_nn"""
+    def load_neural_net(self, folder):
+        """Load a neural net from json and h5 files exported with export_neural_net"""
         
         self.logger.info('Loading neural net model')
         model = model_from_json(open(os.path.join(folder,'nn_model.json')).read())
@@ -145,7 +143,7 @@ class AudioAnalyzer():
 
         return model
     
-    def export_nn(self, folder):
+    def export_neural_net(self, folder):
         """Export the analyzer's neural net to the given folder
         
         Creates two files, one a json string describing the model and one an
@@ -157,31 +155,56 @@ class AudioAnalyzer():
             
         self.nn.save_weights(os.path.join(folder, 'nn_weights.h5'))
     
-    def train(self):
-        """Using the currently active song, train the neural net"""
+    def train_neural_net(self):
+        """Using the currently active song, train_neural_net the neural net"""
         num_per_class = self.params.get('train_per_class', 1000)
-        nb_epochs = self.params.get('epochs', 1)
+        nb_epoch = self.params.get('epochs', 1)
         batch_size = self.params.get('batch_size', 16)
         nb_classes = self.active_song.num_classes
+        validation_split = self.params.get('validation_split', 0.25)
         
-        all_indices = np.ndarray(0)
+        all_indices = np.ndarray(0, dtype=np.int32)
         
         if self.active_song.classification is not None:
             for class_val in np.unique(self.active_song.classification):
-                class_indices = np.where(self.active_song.classification==class_val)
+                class_indices = np.where(self.active_song.classification==class_val)[0]
                 
-                #Either downsample or upsample class indices
+                #Either downsample or upsample class_indices
+                if class_indices.size < num_per_class:
+                    repeats = np.ceil(num_per_class / float(class_indices.size))
+                    class_indices = np.repeat(class_indices, repeats)
+                    
+                if class_indices.size > num_per_class:
+                    subindices = np.random.randint(low=0, high=class_indices.size-1, size=num_per_class)
+                    class_indices = class_indices[subindices]
+                
+                self.logger.info('%d values of class %d', class_indices.size, class_val)
                 
                 all_indices=np.hstack((all_indices, class_indices))
             
         all_indices.sort()
         
-        train_classes = self.active_song.classification[all_indices]
-        train_data = self.Sxx[:, all_indices]
+        self.logger.debug('Final indices list: %s', str(all_indices))
         
-        train_classes = np_utils.to_categorical(train_classes, nb_classes)
+        Y_train = self.active_song.classification[all_indices]
+        X_train = -np.log10(self.Sxx[:, all_indices]).T
+        X_train /= np.max(X_train)
+        X_train = X_train.reshape(X_train.shape[0], 1, X_train.shape[1], 1)
+
+        Y_train = np_utils.to_categorical(Y_train, nb_classes)
+    
+    
+        self.logger.info('X_train shape %s', str(X_train.shape))
+        self.logger.info('Y_train shape: %s', str(Y_train.shape))
         
-            
+        self.logger.info('X_train max %s', str(np.max(X_train)))
+        self.logger.info('X_train min %s', str(np.min(X_train)))
+                
+        self.logger.info('Begin training process: ')
+    
+        self.nn.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epoch, show_accuracy=True, verbose=1, validation_split=validation_split)
+
+
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
         active SongFile
@@ -348,7 +371,7 @@ class SongFile:
         
     @property
     def num_classes(self):
-        return max(self.classification)+1
+        return len(np.unique(self.classification))
         
     @classmethod
     def load(cls, filename, split=600, downsampling=None):
