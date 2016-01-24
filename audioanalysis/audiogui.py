@@ -120,7 +120,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
-                {'type':'Dense', 'args':(128,)},
+                {'type':'Dense', 'args':(256,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
