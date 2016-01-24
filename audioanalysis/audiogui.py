@@ -120,11 +120,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
-                {'type':'Dense', 'args':(512,)},
+                {'type':'Dense', 'args':(1024,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
-                {'type':'Dense', 'args':(32,)},
+                {'type':'Dense', 'args':(128,)},
                 {'type':'Activation', 'args':('relu',)},
+                {'type':'Dropout', 'args':(0.5,)},
                 ]
         
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
@@ -134,11 +135,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
-                       'min_freq':440.0, 'train_per_class':15000, 'epochs':5,
-                       'batch_size':50, 'validation_split':0.33
+                       'min_freq':440.0, 'epochs':5,
+                       'batch_size':50, 'validation_split':0.33,
+                       'snr':1
                        }
         
-            
         self.analyzer = AudioAnalyzer(**self.params)
         self.player = pyaudio.PyAudio()
         

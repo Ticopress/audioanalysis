@@ -25,6 +25,10 @@ import logging
 from scipy import signal
 import scipy.io.wavfile
 import numpy as np
+try:
+   import cPickle as pickle
+except:
+   import pickle
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
@@ -163,7 +167,7 @@ class AudioAnalyzer():
         batch_size = self.params.get('batch_size', 16)
         nb_classes = self.active_song.num_classes
         validation_split = self.params.get('validation_split', 0.25)
-        signal_noise_ratio = self.params.get('snr', 0.33)
+        signal_noise_ratio = self.params.get('snr', 1)
         
         all_indices = np.ndarray(0, dtype=np.int32)
         
@@ -309,11 +313,11 @@ class AudioAnalyzer():
             sf.classification = np.zeros(time_list.size) 
         
         sf.time = time_list
-        sf.freq = freq
+        sf.freq = freq[0:nfft/2]
         sf.entropy = self.calc_entropy(Sxx)
         sf.power = self.calc_power(Sxx)
         
-        return Sxx
+        return Sxx[0:nfft/2, :]
     
     
     @staticmethod
@@ -340,7 +344,7 @@ class AudioAnalyzer():
         """Calculates average signal power"""
         return np.sum(Sxx, 0) / Sxx.shape[0]
 
-class SongFile:
+class SongFile(object):
     """Class for storing data related to each song
     
     Critical values like entropy, STFT, and amplitude are not held in this class
@@ -511,6 +515,31 @@ class SongFile:
         fullpath = os.path.join(destination, filename)
         
         scipy.io.wavfile.write(fullpath, int(self.Fs), self.data)
-
         
+    
+    def pickle(self, destination, filename=None):
+        if filename is None:
+            filename = str(self) + '.pkl'
+        elif os.path.splitext(filename)[1] is not '.pkl':
+            filename = filename + '.pkl'
+        
+        fullpath = os.path.join(destination, filename)
+        
+        with open(fullpath, 'wb') as picklefile:
+            pickle.dump(self, picklefile)
+        
+    @classmethod
+    def unpickle(cls, filename):
+        with open(filename, 'rb') as picklefile:
+            sf = pickle.load(picklefile)
+            
+        try:
+            assert isinstance(sf, cls)
+        except AssertionError:
+            logging.getLogger('SongFile.Unpickler').error('Cannot unpickle the '
+            'file %s, not a valid instance of SongFile', filename)
+        else:
+            return sf
+    
+       
         
