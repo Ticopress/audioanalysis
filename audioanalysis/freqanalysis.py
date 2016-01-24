@@ -163,30 +163,38 @@ class AudioAnalyzer():
         batch_size = self.params.get('batch_size', 16)
         nb_classes = self.active_song.num_classes
         validation_split = self.params.get('validation_split', 0.25)
+        signal_noise_ratio = self.params.get('snr', 0.33)
         
         all_indices = np.ndarray(0, dtype=np.int32)
         
         if self.active_song.classification is not None:
-            for class_val in np.unique(self.active_song.classification):
-                class_indices = np.where(self.active_song.classification==class_val)[0]
-                
-                #Either downsample or upsample class_indices
-                if class_indices.size < num_per_class:
-                    repeats = np.ceil(num_per_class / float(class_indices.size))
-                    class_indices = np.repeat(class_indices, repeats)
-                    
-                if class_indices.size > num_per_class:
-                    subindices = np.random.randint(low=0, high=class_indices.size-1, size=num_per_class)
-                    class_indices = class_indices[subindices]
-                
-                self.logger.info('%d values of class %d', class_indices.size, class_val)
-                
-                all_indices=np.hstack((all_indices, class_indices))
+#             for class_val in np.unique(self.active_song.classification):
+#                 class_indices = np.where(self.active_song.classification==class_val)[0]
+#                 
+#                 #Either downsample or upsample class_indices
+#                 if class_indices.size < num_per_class:
+#                     repeats = np.ceil(num_per_class / float(class_indices.size))
+#                     class_indices = np.repeat(class_indices, repeats)
+#                     
+#                 if class_indices.size > num_per_class:
+#                     subindices = np.random.randint(low=0, high=class_indices.size-1, size=num_per_class)
+#                     class_indices = class_indices[subindices]
+#                 
+#                 self.logger.info('%d values of class %d', class_indices.size, class_val)
+#                 
+#                 all_indices=np.hstack((all_indices, class_indices))
+            signal_indices = np.where(self.active_song.classification>0)[0]
+            self.logger.info('Signal indices: %d', signal_indices.size)
+
+            noise_size = signal_indices.size / signal_noise_ratio
+            noise_indices = np.where(self.active_song.classification==0)[0]
+            subindices = np.random.randint(low=0, high=noise_indices.size-1, size=noise_size)
+            noise_indices = noise_indices[subindices]
+            self.logger.info('Noise indices: %d', noise_indices.size)
+
             
-        all_indices.sort()
-        
-        self.logger.debug('Final indices list: %s', str(all_indices))
-        
+            all_indices = sorted(np.hstack((noise_indices, signal_indices)))
+            
         Y_train = self.active_song.classification[all_indices]
         X_train = -np.log10(self.Sxx[:, all_indices]).T
         X_train /= np.max(X_train)
