@@ -123,6 +123,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 {'type':'Dense', 'args':(256,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
+                {'type':'Dense', 'args':(32,)},
+                {'type':'Activation', 'args':('relu',)},
                 ]
         
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
