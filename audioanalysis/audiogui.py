@@ -113,9 +113,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
-                {'type':'Convolution2D', 'args':(32,6,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(32,6,1,)},
+                {'type':'Convolution2D', 'args':(16,3,1,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
