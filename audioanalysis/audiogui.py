@@ -113,14 +113,14 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
-                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(16,6,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(16,3,1,)},
+                {'type':'Convolution2D', 'args':(16,6,1,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
-                {'type':'Dense', 'args':(64,)},
+                {'type':'Dense', 'args':(128,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
@@ -132,8 +132,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
-                       'min_freq':440.0, 'train_per_class':7500, 'epochs':3,
-                       'batch_size':50, 'validation_split':0.25
+                       'min_freq':440.0, 'train_per_class':15000, 'epochs':3,
+                       'batch_size':50, 'validation_split':0.33
                        }
         
             
