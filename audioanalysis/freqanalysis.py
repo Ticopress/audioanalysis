@@ -25,6 +25,7 @@ import logging
 from scipy import signal
 import scipy.io.wavfile
 import numpy as np
+
 try:
    import cPickle as pickle
 except:
@@ -40,16 +41,14 @@ class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
     """
-
+    logger = logging.getLogger('AudioAnalyzer.logger')
     
     def __init__(self, **params):
         """Create an AudioAnalyzer
         
         All keyword arguments are gathered and stored in the instance's 
         self.params.  Keyword arguments relate to STFT parameters, 
-        """
-        self.logger = logging.getLogger('AudioAnalyzer.logger')
-        
+        """        
         #List of loaded songs
         self.songs = []
         self.motifs = []
@@ -60,7 +59,7 @@ class AudioAnalyzer():
         self.params = params
         
         #Reference to the neural net used for processing
-        self.nn = None
+        self.classifier = None
     
     def build_neural_net(self, **params):
         """Construct and compile a Keras neural net
@@ -156,9 +155,9 @@ class AudioAnalyzer():
         """
         
         with open(os.path.join(folder, 'nn_model.json'), 'w') as outfile:
-            outfile.write(self.nn.to_json()) 
+            outfile.write(self.classifier.to_json()) 
             
-        self.nn.save_weights(os.path.join(folder, 'nn_weights.h5'))
+        self.classifier.save_weights(os.path.join(folder, 'nn_weights.h5'))
     
     def train_neural_net(self):
         """Using the currently active song, train_neural_net the neural net"""
@@ -220,7 +219,7 @@ class AudioAnalyzer():
                 
         self.logger.info('Begin training process: ')
     
-        self.nn.fit(
+        self.classifier.fit(
                 X_train, Y_train, 
                 batch_size=batch_size, 
                 nb_epoch=nb_epoch, 
@@ -343,6 +342,12 @@ class AudioAnalyzer():
     def calc_power(Sxx):
         """Calculates average signal power"""
         return np.sum(Sxx, 0) / Sxx.shape[0]
+    
+    def classify_active(self):
+        """Creates a classification for the active song using a trained classifier"""
+        
+        
+        
 
 class SongFile(object):
     """Class for storing data related to each song
@@ -353,6 +358,7 @@ class SongFile(object):
     determined by the AudioAnalyzer class.
 
     Instead, this stores the basic song data: Fs, analog signal data"""
+    logger = logging.getLogger('SongFile.logger')
     
     def __init__(self, data, Fs, name='', start=0):
         """Create a SongFile for storing signal data
@@ -366,7 +372,6 @@ class SongFile(object):
             start: a value in seconds indicating that the SongFile's data does
                 not come from the start of a longer signal
         """
-        self.logger = logging.getLogger('SongFile.logger')
         
         #Values passed into the init
         self.data = data
@@ -489,7 +494,6 @@ class SongFile(object):
                 in_motif = False
                 sf.logger.debug('Motif for %s end at %0.4f', sf.name, t)
 
-        
         #Check that lengths satisfy the requirements
         return [m for m in motifs if min_dur<=m.length<=max_dur]
     
@@ -503,8 +507,8 @@ class SongFile(object):
     def export(self, destination, filename=None):
         """Exports data in WAV format
         
-        Not useful for SongFiles you just loaded, but possible quite useful for
-        generated SongFiles, or for subclasses of SongFile, like for SongMotifs
+        Not useful for SongFiles you just loaded, but possibly quite useful for
+        generated SongFiles.
         """
         
         if filename is None:
@@ -516,7 +520,6 @@ class SongFile(object):
         
         scipy.io.wavfile.write(fullpath, int(self.Fs), self.data)
         
-    
     def pickle(self, destination, filename=None):
         if filename is None:
             filename = str(self) + '.pkl'
@@ -524,9 +527,11 @@ class SongFile(object):
             filename = filename + '.pkl'
         
         fullpath = os.path.join(destination, filename)
-        
+        self.logger.info('Pickling to %s', fullpath)
         with open(fullpath, 'wb') as picklefile:
             pickle.dump(self, picklefile)
+            
+        self.logger.info('Done pickling!')
         
     @classmethod
     def unpickle(cls, filename):

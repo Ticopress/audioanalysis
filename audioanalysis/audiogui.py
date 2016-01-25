@@ -44,7 +44,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     
     """
     
-
+    
+    logger = logging.getLogger('AudioGUI.logger')
+    
     def __init__(self):
         """Create a new AudioGUI
         
@@ -58,7 +60,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.raise_()
         self.activateWindow()
         #Initialize logging
-        self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
         #sys.stdout = OutLog(self.console, sys.stdout)
@@ -104,6 +105,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.action_find_current_motifs.triggered.connect(
                 lambda: self.find_motifs('current'))
         
+        self.action_pickle_active_song.triggered.connect(self.pickle_active_song)
+        self.action_unpickle_song.triggered.connect(self.unpickle_song)
         
         self.song_table.cellDoubleClicked.connect(
                 lambda r, c: self.table_clicked('songs', r))
@@ -135,7 +138,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
-                       'min_freq':440.0, 'epochs':5,
+                       'min_freq':440.0, 'epochs':15,
                        'batch_size':50, 'validation_split':0.33,
                        'snr':1
                        }
@@ -269,14 +272,14 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             except (IOError, KeyError):
                 self.logger.error('No valid neural net in that file')
             else:
-                self.analyzer.nn = net
+                self.analyzer.classifier = net
         else:
             self.logger.debug('Cancelled loading of neural net')
     
     @QtCore.pyqtSlot()              
     def create_new_neural_net(self):
         """Uses the Analyzer's active_song to construct and train a neural net"""
-        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
+        self.analyzer.classifier = self.analyzer.build_neural_net(**self.analyzer.params)
         
         #then, train it
         self.analyzer.train_neural_net()
@@ -296,6 +299,33 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.analyzer.export_neural_net(fullpath)
         else:
             self.logger.debug('Cancelled save neural net')
+            
+    @QtCore.pyqtSlot()
+    def unpickle_song(self):
+        """Load a pickled song with its classification and make it active"""
+        self.logger.debug('Clicked the unpickle song button')
+        
+        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Select pickled song', 
+                '', 'PICKLE files (*.pkl)')
+        
+        if file_name:
+            sf = SongFile.unpickle(file_name)
+            self.analyzer.songs.append(sf)
+            self.analyzer.set_active(sf)
+            self.update_table('songs')
+            self.show_active_song()
+        else:
+            self.logger.debug('Cancelled file select')
+    
+    @QtCore.pyqtSlot()       
+    def pickle_active_song(self):
+        """Save the active song as a pickle file, preserving classification"""
+        self.logger.debug('Clicked the pickle active song button')
+        
+        destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
+                    'Choose location for pickled song'))
+        
+        self.analyzer.active_song.pickle(destination=destination)
 
     @QtCore.pyqtSlot()              
     def save_motifs(self, mode):
