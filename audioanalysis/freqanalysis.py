@@ -23,31 +23,32 @@ import sys, os
 import logging
 
 from scipy import signal
-from scipy.signal import butter, lfilter
-
 import scipy.io.wavfile
 import numpy as np
+
+try:
+   import cPickle as pickle
+except:
+   import pickle
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
 from keras.models import Sequential, model_from_json
-
-
+from keras.utils import np_utils
+from sklearn.cross_validation import train_test_split
 
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
     """
-
+    logger = logging.getLogger('AudioAnalyzer.logger')
     
     def __init__(self, **params):
         """Create an AudioAnalyzer
         
         All keyword arguments are gathered and stored in the instance's 
         self.params.  Keyword arguments relate to STFT parameters, 
-        """
-        self.logger = logging.getLogger('AudioAnalyzer.logger')
-        
+        """        
         #List of loaded songs
         self.songs = []
         self.motifs = []
@@ -58,7 +59,7 @@ class AudioAnalyzer():
         self.params = params
         
         #Reference to the neural net used for processing
-        self.nn = None
+        self.classifier = None
     
     def build_neural_net(self, **params):
         """Construct and compile a Keras neural net
@@ -69,7 +70,7 @@ class AudioAnalyzer():
                 'categorical_crossentropy'
             optimizer: a string specifying a Keras optimizer.  Defaults to 'sgd'
         """
-        
+        self.logger.info('Constructing parameterized neural network')
         nn = Sequential()
         
         layers = params.get('layers', [])
@@ -135,8 +136,8 @@ class AudioAnalyzer():
         
         return l
     
-    def reconstitute_nn(self, folder):
-        """Load a neural net from json and h5 files exported with export_nn"""
+    def load_neural_net(self, folder):
+        """Load a neural net from json and h5 files exported with export_neural_net"""
         
         self.logger.info('Loading neural net model')
         model = model_from_json(open(os.path.join(folder,'nn_model.json')).read())
@@ -146,7 +147,7 @@ class AudioAnalyzer():
 
         return model
     
-    def export_nn(self, folder):
+    def export_neural_net(self, folder):
         """Export the analyzer's neural net to the given folder
         
         Creates two files, one a json string describing the model and one an
@@ -154,10 +155,80 @@ class AudioAnalyzer():
         """
         
         with open(os.path.join(folder, 'nn_model.json'), 'w') as outfile:
-            outfile.write(self.nn.to_json()) 
+            outfile.write(self.classifier.to_json()) 
             
-        self.nn.save_weights(os.path.join(folder, 'nn_weights.h5'))
+        self.classifier.save_weights(os.path.join(folder, 'nn_weights.h5'))
+    
+    def train_neural_net(self):
+        """Using the currently active song, train_neural_net the neural net"""
+        num_per_class = self.params.get('train_per_class', 1000)
+        nb_epoch = self.params.get('epochs', 1)
+        batch_size = self.params.get('batch_size', 16)
+        nb_classes = self.active_song.num_classes
+        validation_split = self.params.get('validation_split', 0.25)
+        signal_noise_ratio = self.params.get('snr', 1)
+        
+        all_indices = np.ndarray(0, dtype=np.int32)
+        
+        if self.active_song.classification is not None:
+#             for class_val in np.unique(self.active_song.classification):
+#                 class_indices = np.where(self.active_song.classification==class_val)[0]
+#                 
+#                 #Either downsample or upsample class_indices
+#                 if class_indices.size < num_per_class:
+#                     repeats = np.ceil(num_per_class / float(class_indices.size))
+#                     class_indices = np.repeat(class_indices, repeats)
+#                     
+#                 if class_indices.size > num_per_class:
+#                     subindices = np.random.randint(low=0, high=class_indices.size-1, size=num_per_class)
+#                     class_indices = class_indices[subindices]
+#                 
+#                 self.logger.info('%d values of class %d', class_indices.size, class_val)
+#                 
+#                 all_indices=np.hstack((all_indices, class_indices))
+            signal_indices = np.where(self.active_song.classification>0)[0]
+            self.logger.info('Signal indices: %d', signal_indices.size)
+
+            noise_size = signal_indices.size / signal_noise_ratio
+            noise_indices = np.where(self.active_song.classification==0)[0]
+            subindices = np.random.randint(low=0, high=noise_indices.size-1, size=noise_size)
+            noise_indices = noise_indices[subindices]
+            self.logger.info('Noise indices: %d', noise_indices.size)
+
             
+            all_indices = sorted(np.hstack((noise_indices, signal_indices)))
+            
+        Y_train = self.active_song.classification[all_indices]
+        X_train = -np.log10(self.Sxx[:, all_indices]).T
+        X_train /= np.max(X_train)
+        X_train = X_train.reshape(X_train.shape[0], 1, X_train.shape[1], 1)
+
+        Y_train = np_utils.to_categorical(Y_train, nb_classes)
+    
+    
+        X_train, X_test, Y_train, Y_test = train_test_split(
+                X_train, Y_train,
+                test_size=validation_split,
+                )
+    
+        self.logger.info('X_train shape %s', str(X_train.shape))
+        self.logger.info('Y_train shape: %s', str(Y_train.shape))
+        
+        self.logger.info('X_train max %s', str(np.max(X_train)))
+        self.logger.info('X_train min %s', str(np.min(X_train)))
+                
+        self.logger.info('Begin training process: ')
+    
+        self.classifier.fit(
+                X_train, Y_train, 
+                batch_size=batch_size, 
+                nb_epoch=nb_epoch, 
+                show_accuracy=True, 
+                verbose=1, 
+                validation_data=(X_test, Y_test)
+                )
+
+
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
         active SongFile
@@ -167,9 +238,9 @@ class AudioAnalyzer():
         try:
             self.Sxx = self.active_song.Sxx
         except AttributeError:
-            self.Sxx = self.process(self.active_song, **self.params)
+            self.Sxx = self.process(self.active_song)
     
-    def process(self, sf, **params):
+    def process(self, sf):
         """Take a songfile and using its data, create the processed statistics
         
         This method both updates the data stored in the SongFile (for those
@@ -177,10 +248,10 @@ class AudioAnalyzer():
         the SongFile.  You must catch the returned value and save it, it is not
         written to self.Sxx by default
         """
-        time_window_ms = params.get('fft_time_window_ms', 10)
-        time_step_ms = params.get('fft_time_step_ms', 2)
-        nfft = params.get('nfft', 512)
-        process_chunk = params.get('process_chunk_s', 15)
+        time_window_ms = self.params.get('fft_time_window_ms', 10)
+        time_step_ms = self.params.get('fft_time_step_ms', 2)
+        nfft = self.params.get('nfft', 512)
+        process_chunk = self.params.get('process_chunk_s', 15)
         
         noverlap = (time_window_ms - time_step_ms)* sf.Fs/1000
         noverlap = noverlap if noverlap > 0 else 0
@@ -195,7 +266,7 @@ class AudioAnalyzer():
         nperseg = time_window_ms * sf.Fs / 1000
         
         try:
-            min_freq = params['min_freq']
+            min_freq = self.params['min_freq']
             self.logger.info('Highpass filter %g Hz applied', min_freq)
             data = AudioAnalyzer.butter_highpass_filter(sf.data, min_freq, sf.Fs, 5)
         except KeyError:
@@ -241,24 +312,24 @@ class AudioAnalyzer():
             sf.classification = np.zeros(time_list.size) 
         
         sf.time = time_list
-        sf.freq = freq
+        sf.freq = freq[0:nfft/2]
         sf.entropy = self.calc_entropy(Sxx)
         sf.power = self.calc_power(Sxx)
         
-        return Sxx
+        return Sxx[0:nfft/2, :]
     
     
     @staticmethod
     def butter_highpass(cutoff, fs, order=5):
         nyq = 0.5 * fs
         normal_cutoff = cutoff / nyq
-        b, a = butter(order, normal_cutoff, btype='high', analog=False)
+        b, a = signal.butter(order, normal_cutoff, btype='high', analog=False)
         return b, a
 
     @staticmethod
     def butter_highpass_filter(data, cutoff, fs, order=5):
         b, a = AudioAnalyzer.butter_highpass(cutoff, fs, order=order)
-        y = lfilter(b, a, data)
+        y = signal.lfilter(b, a, data)
         return y
     
     @staticmethod
@@ -271,8 +342,14 @@ class AudioAnalyzer():
     def calc_power(Sxx):
         """Calculates average signal power"""
         return np.sum(Sxx, 0) / Sxx.shape[0]
+    
+    def classify_active(self):
+        """Creates a classification for the active song using a trained classifier"""
+        
+        
+        
 
-class SongFile:
+class SongFile(object):
     """Class for storing data related to each song
     
     Critical values like entropy, STFT, and amplitude are not held in this class
@@ -281,6 +358,7 @@ class SongFile:
     determined by the AudioAnalyzer class.
 
     Instead, this stores the basic song data: Fs, analog signal data"""
+    logger = logging.getLogger('SongFile.logger')
     
     def __init__(self, data, Fs, name='', start=0):
         """Create a SongFile for storing signal data
@@ -294,7 +372,6 @@ class SongFile:
             start: a value in seconds indicating that the SongFile's data does
                 not come from the start of a longer signal
         """
-        self.logger = logging.getLogger('SongFile.logger')
         
         #Values passed into the init
         self.data = data
@@ -324,7 +401,7 @@ class SongFile:
         
     @property
     def num_classes(self):
-        return max(self.classification)+1
+        return len(np.unique(self.classification))
         
     @classmethod
     def load(cls, filename, split=600, downsampling=None):
@@ -417,7 +494,6 @@ class SongFile:
                 in_motif = False
                 sf.logger.debug('Motif for %s end at %0.4f', sf.name, t)
 
-        
         #Check that lengths satisfy the requirements
         return [m for m in motifs if min_dur<=m.length<=max_dur]
     
@@ -431,8 +507,8 @@ class SongFile:
     def export(self, destination, filename=None):
         """Exports data in WAV format
         
-        Not useful for SongFiles you just loaded, but possible quite useful for
-        generated SongFiles, or for subclasses of SongFile, like for SongMotifs
+        Not useful for SongFiles you just loaded, but possibly quite useful for
+        generated SongFiles.
         """
         
         if filename is None:
@@ -443,6 +519,32 @@ class SongFile:
         fullpath = os.path.join(destination, filename)
         
         scipy.io.wavfile.write(fullpath, int(self.Fs), self.data)
-
         
+    def pickle(self, destination, filename=None):
+        if filename is None:
+            filename = str(self) + '.pkl'
+        elif os.path.splitext(filename)[1] is not '.pkl':
+            filename = filename + '.pkl'
+        
+        fullpath = os.path.join(destination, filename)
+        self.logger.info('Pickling to %s', fullpath)
+        with open(fullpath, 'wb') as picklefile:
+            pickle.dump(self, picklefile)
+            
+        self.logger.info('Done pickling!')
+        
+    @classmethod
+    def unpickle(cls, filename):
+        with open(filename, 'rb') as picklefile:
+            sf = pickle.load(picklefile)
+            
+        try:
+            assert isinstance(sf, cls)
+        except AssertionError:
+            logging.getLogger('SongFile.Unpickler').error('Cannot unpickle the '
+            'file %s, not a valid instance of SongFile', filename)
+        else:
+            return sf
+    
+       
         
