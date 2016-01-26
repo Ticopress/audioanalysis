@@ -53,19 +53,16 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         """
         #Initialization of GUI from Qt Designer
-        app = QtGui.QApplication(sys.argv)
         super(AudioGUI, self).__init__()
         self.setupUi(self)
         
-        self.raise_()
-        self.activateWindow()
         #Initialize logging
         
         #Initialize text output to GUI
         #sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -116,17 +113,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
-                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(32,3,3,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(16,3,1,)},
+                {'type':'Convolution2D', 'args':(32,3,3,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
+                {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,2,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
-                {'type':'Dense', 'args':(1024,)},
+                {'type':'Dense', 'args':(256,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
-                {'type':'Dense', 'args':(128,)},
+                {'type':'Dense', 'args':(32,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
@@ -138,9 +135,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
-                       'min_freq':440.0, 'epochs':15,
+                       'min_freq':440.0, 'epochs':1,
                        'batch_size':50, 'validation_split':0.33,
-                       'snr':1
+                       'snr':1, 'img_cols':10, 'img_rows':64,
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
@@ -150,7 +147,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.show()
         
         self.logger.info('Finished with initialization')
-        sys.exit(app.exec_())
+
     
     def set_canvas(self, canvas, loc):
         """Set the SpectrogramCanvas for this GUI
@@ -279,7 +276,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     @QtCore.pyqtSlot()              
     def create_new_neural_net(self):
         """Uses the Analyzer's active_song to construct and train a neural net"""
-        self.analyzer.classifier = self.analyzer.build_neural_net(**self.analyzer.params)
+        self.analyzer.classifier = self.analyzer.build_neural_net()
         
         #then, train it
         self.analyzer.train_neural_net()
@@ -299,6 +296,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.analyzer.export_neural_net(fullpath)
         else:
             self.logger.debug('Cancelled save neural net')
+            
+        self.logger.info('Neural net saved!')
             
     @QtCore.pyqtSlot()
     def unpickle_song(self):
@@ -480,7 +479,14 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
     @QtCore.pyqtSlot(str)    
     def auto_classify(self, mode):
-        pass
+        if mode == 'all':
+            for sf in self.analyzer.songs:
+                self.analyzer.set_active(sf)
+                self.analyzer.classify_active()
+            
+        elif mode == 'current':
+                self.analyzer.classify_active()
+        
 
     @QtCore.pyqtSlot(str)    
     def find_motifs(self, mode):
@@ -490,7 +496,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 
             self.update_table('motifs')
             
-        if mode == 'current':
+        elif mode == 'current':
             self.analyzer.motifs += SongFile.find_motifs(self.analyzer.active_song, **self.params)
             self.update_table('motifs')
        
@@ -1281,8 +1287,11 @@ class OutLog:
         pass
  
            
-def main():    
+def main():  
+    app = QtGui.QApplication(sys.argv)
+      
     main = AudioGUI()
+    sys.exit(app.exec_())
     
 if __name__ == '__main__':
     main()

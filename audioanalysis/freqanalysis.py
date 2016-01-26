@@ -61,7 +61,7 @@ class AudioAnalyzer():
         #Reference to the neural net used for processing
         self.classifier = None
     
-    def build_neural_net(self, **params):
+    def build_neural_net(self):
         """Construct and compile a Keras neural net
         
         Keyword Arguments:
@@ -73,17 +73,14 @@ class AudioAnalyzer():
         self.logger.info('Constructing parameterized neural network')
         nn = Sequential()
         
-        layers = params.get('layers', [])
+        layers = self.params.get('layers', [])
+        img_rows = self.params.get('img_rows', self.Sxx.shape[0])
+        img_cols = self.params.get('img_cols', 1)
                 
         for i, layerspec in enumerate(layers):
             if i==0: #size the input layer correctly
-                try:
-                    layerspec['kwargs']['input_shape'] = (1, 
-                            len(self.active_song.freq), 1)
-                except (AttributeError, TypeError):
-                    self.logger.error('No active song set, cannot build neural'
-                            ' net')
-                    return None
+                layerspec['kwargs']['input_shape'] = (1, img_rows, img_cols)
+
             l = self.make_layer(layerspec)
             nn.add(l)
             
@@ -161,62 +158,29 @@ class AudioAnalyzer():
     
     def train_neural_net(self):
         """Using the currently active song, train_neural_net the neural net"""
-        num_per_class = self.params.get('train_per_class', 1000)
         nb_epoch = self.params.get('epochs', 1)
         batch_size = self.params.get('batch_size', 16)
         nb_classes = self.active_song.num_classes
         validation_split = self.params.get('validation_split', 0.25)
-        signal_noise_ratio = self.params.get('snr', 1)
         
-        all_indices = np.ndarray(0, dtype=np.int32)
         
-        if self.active_song.classification is not None:
-#             for class_val in np.unique(self.active_song.classification):
-#                 class_indices = np.where(self.active_song.classification==class_val)[0]
-#                 
-#                 #Either downsample or upsample class_indices
-#                 if class_indices.size < num_per_class:
-#                     repeats = np.ceil(num_per_class / float(class_indices.size))
-#                     class_indices = np.repeat(class_indices, repeats)
-#                     
-#                 if class_indices.size > num_per_class:
-#                     subindices = np.random.randint(low=0, high=class_indices.size-1, size=num_per_class)
-#                     class_indices = class_indices[subindices]
-#                 
-#                 self.logger.info('%d values of class %d', class_indices.size, class_val)
-#                 
-#                 all_indices=np.hstack((all_indices, class_indices))
-            signal_indices = np.where(self.active_song.classification>0)[0]
-            self.logger.info('Signal indices: %d', signal_indices.size)
-
-            noise_size = signal_indices.size / signal_noise_ratio
-            noise_indices = np.where(self.active_song.classification==0)[0]
-            subindices = np.random.randint(low=0, high=noise_indices.size-1, size=noise_size)
-            noise_indices = noise_indices[subindices]
-            self.logger.info('Noise indices: %d', noise_indices.size)
-
-            
-            all_indices = sorted(np.hstack((noise_indices, signal_indices)))
-            
-        Y_train = self.active_song.classification[all_indices]
-        X_train = -np.log10(self.Sxx[:, all_indices]).T
-        X_train /= np.max(X_train)
-        X_train = X_train.reshape(X_train.shape[0], 1, X_train.shape[1], 1)
+        indices = np.arange(0,self.active_song.time.size-50)
+        (X_train, Y_train) = self.get_data_sample(indices)
 
         Y_train = np_utils.to_categorical(Y_train, nb_classes)
-    
+        
+        self.logger.info('X_train shape %s', str(X_train.shape))
+        self.logger.info('Y_train shape: %s', str(Y_train.shape))
+        
+        self.logger.info('X_train max %s', str(np.amax(X_train)))
+        self.logger.info('X_train min %s', str(np.amin(X_train)))
     
         X_train, X_test, Y_train, Y_test = train_test_split(
                 X_train, Y_train,
                 test_size=validation_split,
+                random_state=np.random.randint(0,100000,1)[0]
                 )
-    
-        self.logger.info('X_train shape %s', str(X_train.shape))
-        self.logger.info('Y_train shape: %s', str(Y_train.shape))
-        
-        self.logger.info('X_train max %s', str(np.max(X_train)))
-        self.logger.info('X_train min %s', str(np.min(X_train)))
-                
+   
         self.logger.info('Begin training process: ')
     
         self.classifier.fit(
@@ -228,6 +192,48 @@ class AudioAnalyzer():
                 validation_data=(X_test, Y_test)
                 )
 
+
+    def get_data_sample(self, idx):
+        """Get a sample from the spectrogram and the corresponding class
+        
+        Inputs:
+            idx: an ndarray of integer indices
+        
+        Returns:
+            (data, classification): a tuple where data is a 
+                (1,1,img_rows,img_cols) slice from Sxx and classification is the 
+                corresponding integer class from self.active_song.classification
+                
+        If idx exceeds the dimensions of the data, throws IndexError
+        If there is not a processed, active song, throws TypeError
+        """
+        
+        img_rows = self.params.get('img_rows', self.Sxx.shape[0])
+        img_cols = self.params.get('img_cols', 1)
+        
+        if self.Sxx is None or self.active_song.classification is None:
+            raise TypeError('No active song from which to get data')
+        
+        if np.amax(idx) > self.Sxx.shape[1]-img_cols:
+            raise IndexError('Data index of sample out of bounds, only {0} '
+                    'samples in the dataset'.format(self.Sxx.shape[1]-img_cols))
+        
+        if np.amin(idx) < 0:
+            raise IndexError('Data index of sample out of bounds, '
+                    'negative index requested')
+            
+        #index out the data   
+        classification = self.active_song.classification[idx]
+
+        data_slices = [self.Sxx[0:img_rows, idx+i].T.reshape(idx.size, 1, img_rows) for i in range(img_cols)]
+        data = np.stack(data_slices, axis=-1)
+
+        #scale the input
+        data = np.log10(data)
+        data -= np.amin(data)
+        data /= np.amax(data)
+        
+        return (data, classification)
 
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
@@ -344,10 +350,16 @@ class AudioAnalyzer():
         return np.sum(Sxx, 0) / Sxx.shape[0]
     
     def classify_active(self):
-        """Creates a classification for the active song using a trained classifier"""
+        """Creates a classification for the active song using classifier
         
-        
-        
+        """
+        input = -np.log10(self.Sxx[:, :]).T
+        input /= np.max(input)
+        input = input.reshape(input.shape[0], 1, input.shape[1], 1)
+        prbs = self.classifier.predict_proba(input, batch_size=1000, verbose=1)
+
+        #prbs is an samples_x_classes array of likelihoods
+        #Need to smooth it, window it, and convert to categorie
 
 class SongFile(object):
     """Class for storing data related to each song
