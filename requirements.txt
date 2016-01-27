@@ -8,7 +8,6 @@ ipython==4.0.2
 ipython-genutils==0.1.0
 Keras==0.3.1
 matplotlib==1.5.1
-Nuitka==0.5.18
 numpy==1.10.4
 path.py==8.1.2
 pexpect==4.0.1

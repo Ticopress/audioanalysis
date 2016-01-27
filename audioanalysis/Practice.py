@@ -73,7 +73,6 @@ def main():
     model.add(Dense(nb_classes))
     model.add(Activation('softmax'))
     
-    
     print("Compiling!")
     
     model.compile(loss='categorical_crossentropy', optimizer='adadelta')

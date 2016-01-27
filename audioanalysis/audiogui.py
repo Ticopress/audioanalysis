@@ -113,11 +113,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
-                {'type':'Convolution2D', 'args':(32,3,3,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(32,3,3,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,2,)}},
+                {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
                 {'type':'Dense', 'args':(256,)},
@@ -137,7 +137,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
                        'min_freq':440.0, 'epochs':1,
                        'batch_size':50, 'validation_split':0.33,
-                       'snr':1, 'img_cols':10, 'img_rows':64,
+                       'snr':1, 'img_cols':1,
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)

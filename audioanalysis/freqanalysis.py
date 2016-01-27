@@ -27,9 +27,9 @@ import scipy.io.wavfile
 import numpy as np
 
 try:
-   import cPickle as pickle
+    import cPickle as pickle
 except:
-   import pickle
+    import pickle
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
