@@ -134,10 +134,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
+                       'smooth_gap':0.15,
                        'min_freq':440.0, 'epochs':1,
                        'batch_size':50, 'validation_split':0.33,
-                       'snr':1, 'img_cols':1,
+                       'snr':1, 'img_cols':1, 'img_rows':128,
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
@@ -486,6 +486,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
         elif mode == 'current':
                 self.analyzer.classify_active()
+                self.show_active_song()
         
 
     @QtCore.pyqtSlot(str)    
