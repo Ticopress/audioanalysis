@@ -129,15 +129,14 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 ]
         
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
-                       'freq_downsample_disp':1, 'display_threshold':-400, 
+                       'freq_downsample_disp':1, 
                        'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'smooth_gap':0.15,
-                       'min_freq':440.0, 'epochs':1,
-                       'batch_size':50, 'validation_split':0.33,
-                       'snr':1, 'img_cols':1, 'img_rows':128,
+                       'min_freq':440.0, 'epochs':10,
+                       'batch_size':50, 'validation_split':0.15,
+                       'img_cols':1, 'img_rows':128,
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
@@ -270,6 +269,13 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 self.logger.error('No valid neural net in that file')
             else:
                 self.analyzer.classifier = net
+                shape = self.analyzer.classifier.layers[0].input_shape
+                self.params['img_rows'] = shape[2]
+                self.params['img_cols'] = shape[3]
+                self.analyzer.params['img_rows'] = shape[2]
+                self.analyzer.params['img_cols'] = shape[3]
+                
+                
         else:
             self.logger.debug('Cancelled loading of neural net')
     
