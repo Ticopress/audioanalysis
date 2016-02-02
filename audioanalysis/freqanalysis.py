@@ -380,16 +380,21 @@ class AudioAnalyzer():
         input = self.get_data_sample(indices)
                 
         prbs = self.classifier.predict_proba(input, batch_size=100, verbose=1).T
-
-        for i in range(prbs.shape[1]):
-            print self.active_song.time[i], ':', prbs[:, i]
-            
+        #for i in range(prbs.shape[1]):
+        #    print self.active_song.time[i], ':', prbs[:, i]
+         
         new_prbs = self.probs_to_classes(prbs)
-        
-        for i in range(new_prbs.shape[1]):
-            print self.active_song.time[i], ':', new_prbs[:, i]
-            
-        self.active_song.classification = np.argmax(new_prbs, axis=0)
+        print new_prbs.shape
+#         for i in range(new_prbs.shape[1]):
+#             print self.active_song.time[i], ':', new_prbs[:, i]
+        medfilt_time = self.params.get('medfilt_time', 0.02)
+        dt = self.active_song.time[1]-self.active_song.time[0]
+        windowsize = int(np.round(medfilt_time/dt))
+        windowsize = windowsize + (windowsize+1)%2
+
+        self.active_song.classification = signal.medfilt(np.argmax(new_prbs, axis=0), windowsize) 
+        self.active_song.entropy = new_prbs[1, :]
+        self.active_song.power = new_prbs[2, :]
 
         #prbs is an samples_x_classes array of likelihoods
         #Need to smooth it, window it, and convert to categorie
@@ -401,16 +406,14 @@ class AudioAnalyzer():
         Naive argmax returns a very noisy signal - windowing helps focus on
         strongly matching areas.
         """
-        smooth_time = self.params.get('smooth_time', 0.5)
+        smooth_time = self.params.get('smooth_time', 0.1)
         dt = self.active_song.time[1]-self.active_song.time[0]
-        
         windowsize = np.round(smooth_time/dt)
+        window = np.ones(int(windowsize))/windowsize
         
-        nclasses = self.active_song.num_classes
+        num_classes = probabilities.shape[0]
         
-        window = np.blackman(int(windowsize))
-        
-        smooth_prbs = [np.convolve(probabilities[i,:], window, mode='same') for i in range(nclasses)]
+        smooth_prbs = [np.convolve(probabilities[i, :], window, mode='same') for i in range(num_classes)]
         
         return np.stack(smooth_prbs, axis=0)
     
@@ -418,7 +421,7 @@ class AudioAnalyzer():
 class SongFile(object):
     """Class for storing data related to each song
     
-    Critical values like entropy, STFT, and amplitude are not held in this class
+    Critical values like STFT are not held in this class
     because they are memory expensive.  Only one set of critical values will
     be stored in memory at a time, and that will be for the active song as
     determined by the AudioAnalyzer class.
