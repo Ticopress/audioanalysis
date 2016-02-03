@@ -392,7 +392,7 @@ class AudioAnalyzer():
         windowsize = int(np.round(medfilt_time/dt))
         windowsize = windowsize + (windowsize+1)%2
 
-        self.active_song.classification = signal.medfilt(np.argmax(new_prbs, axis=0), windowsize) 
+        self.active_song.classification = new_prbs[0, :]
         self.active_song.entropy = new_prbs[1, :]
         self.active_song.power = new_prbs[2, :]
 

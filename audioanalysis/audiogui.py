@@ -839,8 +839,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             
         l, = ax.plot(t, classes, 'b-', scalex=False, scaley=False)
         
-        self.set_range('classification', (0, max(classes)+1))
-        
+        #self.set_range('classification', (0, max(classes)+1))
+        self.set_range('classification', (0, 1))
         l.set_visible(show)
 
         self.draw_idle() 
@@ -860,7 +860,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             
         l, = ax.plot(t, entropy, 'g-', scalex=False, scaley=False)
            
-        self.set_range('entropy', (min(entropy), max(entropy)))
+        #self.set_range('entropy', (min(entropy), max(entropy)))
+        self.set_range('entropy', (0, 1))
 
         l.set_visible(show)
 
@@ -878,8 +879,9 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             
         l, = ax.plot(t, power, 'r-', scalex=False, scaley=False)
 
-        self.set_range('power', (min(power), max(power)))
-        
+        #self.set_range('power', (min(power), max(power)))
+        self.set_range('power', (0, 1))
+
         l.set_visible(show)
         
         self.draw_idle()        
