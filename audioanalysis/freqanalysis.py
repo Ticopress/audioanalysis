@@ -20,27 +20,35 @@ You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 """
 import sys, os
+import logging
 
 from scipy import signal
-from scikits.audiolab import Sndfile as SoundFile #Sndfile is a stupid name
+import scipy.io.wavfile
 import numpy as np
-import logging
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
-from keras.models import Sequential
-
+from keras.models import Sequential, model_from_json
+from keras.utils import np_utils
+from sklearn.cross_validation import train_test_split
 
 class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
     """
-
+    logger = logging.getLogger('AudioAnalyzer.logger')
     
     def __init__(self, **params):
-        """Constructor docstrings goes here TODO
-        """
-        self.logger = logging.getLogger('AudioAnalyzer.logger')
+        """Create an AudioAnalyzer
+        
+        All keyword arguments are gathered and stored in the instance's 
+        self.params.  Keyword arguments relate to STFT parameters, 
+        """        
         
         #List of loaded songs
         self.songs = []
@@ -52,22 +60,28 @@ class AudioAnalyzer():
         self.params = params
         
         #Reference to the neural net used for processing
-        self.nn = None
+        self.classifier = None
     
-    def build_neural_net(self, **params):
+    def build_neural_net(self):
+        """Construct and compile a Keras neural net
+        
+        Keyword Arguments:
+            layers: a list of layerspecs, as defined in make_layer
+            loss: a string specifying a Keras loss function.  Defaults to 
+                'categorical_crossentropy'
+            optimizer: a string specifying a Keras optimizer.  Defaults to 'sgd'
+        """
+        self.logger.info('Constructing parameterized neural network')
         nn = Sequential()
         
-        layers = params.get('layers', [])
+        layers = self.params.get('layers', [])
+        img_rows = self.params.get('img_rows', self.Sxx.shape[0])
+        img_cols = self.params.get('img_cols', 1)
                 
         for i, layerspec in enumerate(layers):
             if i==0: #size the input layer correctly
-                try:
-                    layerspec['kwargs']['input_shape'] = (1, 
-                            len(self.active_song.freq), 1)
-                except (AttributeError, TypeError):
-                    self.logger.error('No active song set, cannot build neural'
-                            ' net')
-                    return None
+                layerspec['kwargs']['input_shape'] = (1, img_rows, img_cols)
+
             l = self.make_layer(layerspec)
             nn.add(l)
             
@@ -89,9 +103,18 @@ class AudioAnalyzer():
         
         nn.compile(loss=loss, optimizer=optimizer)
         self.logger.info('Successfully constructed a new neural net')
+        
         return nn
             
     def make_layer(self, layerspec):
+        """Build a layer from a dictionary specifying the layer parameters
+        
+        The layerspec should contain the following entries:
+            type: a class name
+            args: a tuple of arguments for the class's __init__
+            kwargs: a dictionary of kwargs for the class's __init__
+        """
+        
         name = layerspec.get('type')
         self.logger.info('Building layer specified by %s', str(layerspec))
 
@@ -111,18 +134,140 @@ class AudioAnalyzer():
         
         return l
     
+    def load_neural_net(self, folder):
+        """Load a neural net from json and h5 files exported with export_neural_net"""
+        
+        self.logger.info('Loading neural net model')
+        model = model_from_json(open(os.path.join(folder,'nn_model.json')).read())
+        self.logger.info('Loading neural net weights')
+        model.load_weights(os.path.join(folder,'nn_weights.h5'))
+        self.logger.info('Done loading neural net')
+
+        return model
+    
+    def export_neural_net(self, folder):
+        """Export the analyzer's neural net to the given folder
+        
+        Creates two files, one a json string describing the model and one an
+        HDF5 file storing the model's weights
+        """
+        
+        with open(os.path.join(folder, 'nn_model.json'), 'w') as outfile:
+            outfile.write(self.classifier.to_json()) 
+            
+        self.classifier.save_weights(os.path.join(folder, 'nn_weights.h5'))
+    
+    def train_neural_net(self):
+        """Using the currently active song, train_neural_net the neural net"""
+        nb_epoch = self.params.get('epochs', 1)
+        batch_size = self.params.get('batch_size', 16)
+        nb_classes = self.active_song.num_classes
+        validation_split = self.params.get('validation_split', 0.25)
+        
+        
+        indices = np.arange(0,self.active_song.time.size)
+        X_train = self.get_data_sample(indices)
+        Y_train = self.get_classification(indices)
+
+        Y_train = np_utils.to_categorical(Y_train, nb_classes)
+        
+        self.logger.info('X_train shape %s', str(X_train.shape))
+        self.logger.info('Y_train shape: %s', str(Y_train.shape))
+        
+        self.logger.info('X_train max %s', str(np.amax(X_train)))
+        self.logger.info('X_train min %s', str(np.amin(X_train)))
+    
+        X_train, X_test, Y_train, Y_test = train_test_split(
+                X_train, Y_train,
+                test_size=validation_split,
+                random_state=np.random.randint(0,100000,1)[0]
+                )
+   
+        self.logger.info('Begin training process: ')
+    
+        self.classifier.fit(
+                X_train, Y_train, 
+                batch_size=batch_size, 
+                nb_epoch=nb_epoch, 
+                show_accuracy=True, 
+                verbose=1, 
+                validation_data=(X_test, Y_test)
+                )
+    
+    def get_classification(self, idx):
+        """Docs"""
+        
+        img_rows = self.params.get('img_rows', self.Sxx.shape[0])
+        img_cols = self.params.get('img_cols', 1)
+        
+        if self.Sxx is None or self.active_song.classification is None:
+            raise TypeError('No active song from which to get data')
+        
+        if np.amax(idx) > self.Sxx.shape[1]:
+            raise IndexError('Data index of sample out of bounds, only {0} '
+                    'samples in the dataset'.format(self.Sxx.shape[1]-img_cols))
+        
+        if np.amin(idx) < 0:
+            raise IndexError('Data index of sample out of bounds, '
+                    'negative index requested')
+            
+        #index out the data   
+        classification = self.active_song.classification[idx]
+        
+        return classification
+        
+
+    def get_data_sample(self, idx):
+        """Get a sample from the spectrogram and the corresponding class
+        
+        Inputs:
+            idx: an ndarray of integer indices
+        
+        Returns:
+            data: data is a 
+                (1,1,img_rows,img_cols) slice from Sxx and classification is the 
+                corresponding integer class from self.active_song.classification
+                
+        If idx exceeds the dimensions of the data, throws IndexError
+        If there is not a processed, active song, throws TypeError
+        """
+        
+        img_rows = self.params.get('img_rows', self.Sxx.shape[0])
+        img_cols = self.params.get('img_cols', 1)
+        
+        if self.Sxx is None or self.active_song.classification is None:
+            raise TypeError('No active song from which to get data')
+        
+        if np.amax(idx) > self.Sxx.shape[1]:
+            raise IndexError('Data index of sample out of bounds, only {0} '
+                    'samples in the dataset'.format(self.Sxx.shape[1]-img_cols))
+        
+        if np.amin(idx) < 0:
+            raise IndexError('Data index of sample out of bounds, '
+                    'negative index requested')
+            
+        #index out the data   
+        max_idx = (self.Sxx.shape[1]-1)        
+        
+        data_slices = [self.Sxx[0:img_rows, np.minimum(max_idx, idx+i)].T.reshape(idx.size, 1, img_rows) for i in range(img_cols)]
+        data = np.stack(data_slices, axis=-1)
+
+        #scale the input
+        data = np.log10(data)
+        data -= np.amin(data)
+        data /= np.amax(data)
+        
+        return data
+
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
         active SongFile
         """
         self.active_song = sf
-        
-        try:
-            self.Sxx = self.active_song.Sxx
-        except AttributeError:
-            self.Sxx = self.process(self.active_song, **self.params)
+
+        self.Sxx = self.process(self.active_song)
     
-    def process(self, sf, **params):
+    def process(self, sf):
         """Take a songfile and using its data, create the processed statistics
         
         This method both updates the data stored in the SongFile (for those
@@ -130,10 +275,10 @@ class AudioAnalyzer():
         the SongFile.  You must catch the returned value and save it, it is not
         written to self.Sxx by default
         """
-        time_window_ms = params.get('fft_time_window_ms', 10)
-        time_step_ms = params.get('fft_time_step_ms', 2)
-        nfft = params.get('nfft', 512)
-        process_chunk = params.get('process_chunk_s', 15)
+        time_window_ms = self.params.get('fft_time_window_ms', 10)
+        time_step_ms = self.params.get('fft_time_step_ms', 2)
+        nfft = self.params.get('nfft', 512)
+        process_chunk = self.params.get('process_chunk_s', 15)
         
         noverlap = (time_window_ms - time_step_ms)* sf.Fs/1000
         noverlap = noverlap if noverlap > 0 else 0
@@ -146,6 +291,14 @@ class AudioAnalyzer():
             nchunk = sf.data.shape[0]
             
         nperseg = time_window_ms * sf.Fs / 1000
+        
+        try:
+            min_freq = self.params['min_freq']
+            self.logger.info('Highpass filter %g Hz applied', min_freq)
+            data = AudioAnalyzer.butter_highpass_filter(sf.data, min_freq, sf.Fs, 5)
+        except KeyError:
+            data = sf.data
+            self.logger.info('No highpass filter applied')
         
         if nfft < nperseg:
             nfft = 2**np.ceil(np.log2(nperseg))
@@ -161,7 +314,7 @@ class AudioAnalyzer():
                     i*process_chunk, (i+1)*process_chunk)
             
             (freq, time_part, Sxx_part) = signal.spectrogram(
-                    sf.data[i*nchunk:(i+1)*nchunk], 
+                    data[i*nchunk:(i+1)*nchunk], 
                     fs=sf.Fs,
                     nfft=nfft,  #number of bins; must be 2^z
                     nperseg=nperseg, #width in time domain
@@ -183,16 +336,31 @@ class AudioAnalyzer():
         self.logger.debug('STFT dimensions %s', str(Sxx.shape))               
 
         if sf.classification is None:
-            sf.classification = np.zeros(time_list.size)
-            
+            sf.classification = np.zeros(time_list.size) 
+        
         sf.time = time_list
-        sf.freq = freq
+        sf.freq = freq[0:nfft/2]
         sf.entropy = self.calc_entropy(Sxx)
         sf.power = self.calc_power(Sxx)
         
-        return 10*np.log10(Sxx)
+        return Sxx[0:nfft/2, :]
     
-    def calc_entropy(self, Sxx):
+    
+    @staticmethod
+    def butter_highpass(cutoff, fs, order=5):
+        nyq = 0.5 * fs
+        normal_cutoff = cutoff / nyq
+        b, a = signal.butter(order, normal_cutoff, btype='high', analog=False)
+        return b, a
+
+    @staticmethod
+    def butter_highpass_filter(data, cutoff, fs, order=5):
+        b, a = AudioAnalyzer.butter_highpass(cutoff, fs, order=order)
+        y = signal.lfilter(b, a, data)
+        return y
+    
+    @staticmethod
+    def calc_entropy(Sxx):
         """Calculates the Wiener entropy (0 to 1) for each time slice of Sxx"""
         n = Sxx.shape[0]
         return np.exp(np.sum(np.log(Sxx),0)/n) / (np.sum(Sxx, 0)/n)
@@ -201,154 +369,82 @@ class AudioAnalyzer():
     def calc_power(Sxx):
         """Calculates average signal power"""
         return np.sum(Sxx, 0) / Sxx.shape[0]
- 
-    @staticmethod
-    def class_integer_to_vectorized(int_classification):
-        """DEPRECATED.  Exists in np_utils, I think
-        
-        Convert the integer class values to a one-hot vector encoding
-        
-        The class NeuralNetwork requires a one-hot encoding for output state.
-        That is, if there are three states (0,1,2) possible, it expects that
-        these be represented as three 3x1 ndarrays [1 0 0], [0 1 0], and 
-        [0 0 1].  It will also accept fuzzy representations to indicate
-        uncertainty of state, for instance [0.9 0 0.43] is also a valid
-        state encoding to a NeuralNetwork indicating a high probability of
-        state 0, with small possibility of state 2. 
-        
-        This method, however, converts an array of integer state labels to the
-        respective one-hot encoding and returns that ndarray
-        """
-        num_categories = np.max(int_classification) + 1
-        
-        nn_vectors = np.zeros((num_categories, int_classification.size))
-        
-        for idx, i in enumerate(int_classification):
-            nn_vectors[i, idx] = 1
-            
-        return nn_vectors
     
-    @staticmethod
-    def class_vectorized_to_integer(nn_vector_classifications, **kwargs):
-        """Convert a classification ndarray created by a NeuralNetwork to a
-        set of integer classification labels
+    def classify_active(self):
+        """Creates a classification for the active song using classifier
         
-        This method is not yet implemented, and will require advanced
-        processing techniques.  The NN is not required to return a clear
-        classification, and in fact is expected to make small mistakes and
-        to return 'spiky' data.  This method will parse the spiky data and
-        smooth it out, but that will require knowledge of the context of 
-        each data point, which the NN does not use.
-        
-        It may be enough to simply use the weighted average of the classes of
-        neighboring points - however, that may be insufficient. 
-        
-        Inputs:
-            nn_vector_classifications: the ndarray returned by a trained NN
-                attempting to classify a spectrogram
-        Keyword Arguments
-            window_type: a string describing the windowing function to be used.
-                Defaults to 'hamming'
-            window_size: a string describing the width of window to be used.
-                Defaults to 40
-            beta: an argument for window window_type 'kaiser', defaults to 14, with a
-                valid range of 0<beta<infinity
-            sigma: an argument for window window_type 'gaussian', defaults to 0.4,
-                with a valid range 0<sigma<0.5
         """
         
-        window_type = kwargs.get('window_type', 'hamming')
-        N = kwargs.get('window_size', 40)
-        
-        length = nn_vector_classifications.shape[1]
-        new_classification = np.zeros(length)
-
-        new_kwargs = {'beta':kwargs.get('beta', 14), 'sigma':kwargs.get('sigma', 0.4)}
-
-        for idx in range(length):
-            side = ''
-            left = idx - N/2
-            right = idx + N/2
-            if left < 0:
-                left = 0
-                side = 'right'
-            if right > length-1:
-                right = length-1
-                side = 'left'
-            
-            subset = nn_vector_classifications[:, left:right:1]
-            windowed = AudioAnalyzer.apply_window(subset, window_type, side=side, 
-                    **new_kwargs)
-            windowed_average = windowed.mean(1)
-            new_classification[idx] = windowed_average.argmax()
-        
-        return new_classification
-    
-    def class_to_motifs(self):
-        """Take a vector of integer classifications and determine start and
-        end times for motifs.
-        """
-        pass
-    
-    @staticmethod
-    def apply_window(data, window_type, **kwargs):
-        """Takes a window from a set of standard windows and applies it to a
-        classification (in integer or vectorized format).
-        
-        Inputs:
-            data: a numpy ndarray, either 1d or 2d
-            window: a string representing the window_type of window.  Must be one of
-                'gaussian', 'blackman', 'hanning', 'hamming', or 'kaiser'
-        Keyword Arguments
-            beta: a parameter for kaiser windows
-            sigma: a parameter for gaussian windows
-            side: a string determining if the window is one-sided or not
-        """
-        
-        if data.ndim == 1:
-            N = data.size
-        else:
-            N = data.shape[1]
-
-        side = kwargs.get('side', '')
-        if side:
-            N = 2*N
-            
-        n = np.array(range(N))
-        coeffs = np.zeros(N)
-        coeffs[(N-1)/2] = 1
-        if window_type == 'gaussian':
-            sigma = kwargs.get('sigma', 0.25)
-            coeffs = np.exp(-0.5 * ((n - 0.5*(N-1))/(sigma * 0.5*(N-1)))**2)
-        if window_type == 'blackman':
-            coeffs = np.blackman(N)
-        if window_type == 'hamming':
-            coeffs = np.hamming(N)
-        if window_type == 'hanning':
-            coeffs = np.hanning(N)
-        if window_type == 'kaiser':
-            beta = kwargs.get('beta', 14)
-            coeffs = np.kaiser(N, beta)
-        
-        if side=='left':
-            coeffs = coeffs[:N/2]
-        if side=='right':
-            coeffs = coeffs[N/2:]
+        indices = np.arange(self.active_song.time.size)
+        input = self.get_data_sample(indices)
                 
-        return np.multiply(coeffs, data)
-
-class SongFile:
+        prbs = self.classifier.predict_proba(input, batch_size=100, verbose=1).T
+        #for i in range(prbs.shape[1]):
+        #    print self.active_song.time[i], ':', prbs[:, i]
+         
+        #new_prbs = self.probs_to_classes(prbs)
+        #print new_prbs.shape
+#         for i in range(new_prbs.shape[1]):
+#             print self.active_song.time[i], ':', new_prbs[:, i]
+        
+        unfiltered_classes = self.probs_to_classes(prbs)
+        
+        #no need to be wasteful, filter if there is a filter
+        try:
+            medfilt_time = self.params['medfilt_time']
+        except KeyError:
+            filtered_classes = unfiltered_classes
+        else:
+            dt = self.active_song.time[1]-self.active_song.time[0]
+            windowsize = int(np.round(medfilt_time/dt))
+            windowsize = windowsize + (windowsize+1)%2
+            
+            filtered_classes = signal.medfilt(unfiltered_classes, windowsize)
+        
+        self.active_song.classification = filtered_classes
+    
+    def probs_to_classes(self, probabilities):
+        """Takes a likelihood matrix produced by predict_proba and returns
+        the classification for each entry
+        
+        Naive argmax returns a very noisy signal - windowing helps focus on
+        strongly matching areas.
+        """
+        smooth_time = self.params.get('smooth_time', 0.1)
+        dt = self.active_song.time[1]-self.active_song.time[0]
+        windowsize = np.round(smooth_time/dt)
+        window = signal.get_window('hamming', int(windowsize))
+        window /= np.sum(window)
+        
+        num_classes = probabilities.shape[0]
+        
+        smooth_prbs = [np.convolve(probabilities[i, :], window, mode='same') for i in range(num_classes)]
+        
+        return np.argmax(np.stack(smooth_prbs, axis=0), axis=0)
+    
+class SongFile(object):
     """Class for storing data related to each song
     
-    Critical values like entropy, STFT, and amplitude are not held in this class
+    Critical values like STFT are not held in this class
     because they are memory expensive.  Only one set of critical values will
     be stored in memory at a time, and that will be for the active song as
     determined by the AudioAnalyzer class.
 
     Instead, this stores the basic song data: Fs, analog signal data"""
+    logger = logging.getLogger('SongFile.logger')
     
-    def __init__(self, name, data, Fs):
-        self.logger = logging.getLogger('SongFile.logger')
+    def __init__(self, data, Fs, name='', start=0):
+        """Create a SongFile for storing signal data
+        
+        Inputs:
+            data: a numpy array with time series data.  For use with PyAudio,
+                ensure the format of data is the same as the player
+            Fs: sampling frequency, ideally a float
+        Keyword Arguments:
+            name: a string identifying where this SongFile came from
+            start: a value in seconds indicating that the SongFile's data does
+                not come from the start of a longer signal
+        """
         
         #Values passed into the init
         self.data = data
@@ -363,10 +459,9 @@ class SongFile:
         
         
         self.name = name
+        self.start = start
         
-        
-        self.start = 0
-        self.length = len(data)/Fs
+        self.length = len(self.data)/self.Fs
      
     @property
     def domain(self):
@@ -379,10 +474,10 @@ class SongFile:
         
     @property
     def num_classes(self):
-        return max(self.classification)+1
-        
+        return len(np.unique(self.classification))
+    
     @classmethod
-    def load(cls, filename, split=300, downsampling=None):
+    def load(cls, filename, split=600, downsampling=None):
         """Loads a file, splitting it into multiple SongFiles if necessary
         
         Inputs: 
@@ -393,9 +488,9 @@ class SongFile:
         
         Returns an array of SongFiles"""
         
-        f = SoundFile(filename, mode='r')
-        data = f.read_frames(f.nframes, dtype=np.float32)
-        fs = float(f.samplerate)
+        rate, data = scipy.io.wavfile.read(filename)
+        fs = np.float64(rate)
+        data = np.float32(data) / np.max(data)
                 
         if data.ndim is not 1:
             data = data[:, 0]
@@ -411,7 +506,7 @@ class SongFile:
             nperfile = data.shape[0]
             split_count = 1
             
-        if nperfile / fs > 300:
+        if nperfile / fs > 600:
             logging.getLogger('SongFile.Loading.logger').warning(
                     'Current song is %d seconds long and is not'
                     ' split.  This may cause substantial memory use and '
@@ -423,12 +518,9 @@ class SongFile:
         
         for i in range(0, split_count):
             songdata = data[i*nperfile:(i+1)*nperfile]
-            next_sf = cls(os.path.basename(filename), songdata, fs)
-            
-            #override the start/end markers - made from a split file            
-            next_sf.start = int(i*nperfile/fs)
-            next_sf.length = next_sf.start+songdata.shape[0]/fs
-            
+            fname = os.path.splitext(os.path.basename(filename))[0]
+            next_sf = cls(songdata, fs, name=fname, start=int(i*nperfile/fs))
+                        
             sfs.append(next_sf)
             
         return sfs
@@ -469,14 +561,12 @@ class SongFile:
             if in_motif and (i==len(times)-1 or times[i+1]-t > smooth_gap):
                 data = sf.data[sf.time_to_idx(start_time):sf.time_to_idx(t)]
                 #name and Fs are the same
-                new_motif = SongFile(sf.name, data, sf.Fs)
-                new_motif.start = start_time
+                new_motif = SongFile(data, sf.Fs, name=sf.name, start=start_time)
                 
                 motifs.append(new_motif)
                 in_motif = False
                 sf.logger.debug('Motif for %s end at %0.4f', sf.name, t)
 
-        
         #Check that lengths satisfy the requirements
         return [m for m in motifs if min_dur<=m.length<=max_dur]
     
@@ -484,17 +574,50 @@ class SongFile:
         return int(t * self.Fs)
     
     def __str__(self):
-        return '{:s}_{:04f}_{:04f}'.format(
-                self.name, self.start, self.length+self.start)
+        return '{:s}_{:03d}_{:03d}'.format(
+                self.name, int(self.start), int(self.length+self.start))
 
     def export(self, destination, filename=None):
         """Exports data in WAV format
         
-        Not useful for SongFiles you just loaded, but possible quite useful for
-        generated SongFiles, or for subclasses of SongFile, like for SongMotifs
+        Not useful for SongFiles you just loaded, but possibly quite useful for
+        generated SongFiles.
         """
         
         if filename is None:
             filename = str(self) + '.wav'
+        elif os.path.splitext(filename)[1] is not '.wav':
+            filename = filename + '.wav'
         
         fullpath = os.path.join(destination, filename)
+        
+        scipy.io.wavfile.write(fullpath, int(self.Fs), self.data)
+        
+    def pickle(self, destination, filename=None):
+        if filename is None:
+            filename = str(self) + '.pkl'
+        elif os.path.splitext(filename)[1] is not '.pkl':
+            filename = filename + '.pkl'
+        
+        fullpath = os.path.join(destination, filename)
+        self.logger.info('Pickling to %s', fullpath)
+        with open(fullpath, 'wb') as picklefile:
+            pickle.dump(self, picklefile)
+            
+        self.logger.info('Done pickling!')
+        
+    @classmethod
+    def unpickle(cls, filename):
+        with open(filename, 'rb') as picklefile:
+            sf = pickle.load(picklefile)
+            
+        try:
+            assert isinstance(sf, cls)
+        except AssertionError:
+            logging.getLogger('SongFile.Unpickler').error('Cannot unpickle the '
+            'file %s, not a valid instance of SongFile', filename)
+        else:
+            return sf
+    
+       
+        

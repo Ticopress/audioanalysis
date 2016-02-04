@@ -14,11 +14,12 @@ version.
 
 Audio Analysis is distributed in the hope that it will be useful, but WITHOUT 
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS 
-FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+FOR A PARTICULAR PURPOSE. Seedea the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
+
 import sys, os, time, fnmatch
 
 from matplotlib.figure import Figure
@@ -44,7 +45,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     
     """
     
-
+    
+    logger = logging.getLogger('AudioGUI.logger')
+    
     def __init__(self):
         """Create a new AudioGUI
         
@@ -54,16 +57,13 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         super(AudioGUI, self).__init__()
         self.setupUi(self)
         
-        self.raise_()
-        self.activateWindow()
         #Initialize logging
-        self.logger = logging.getLogger('AudioGUI.logger')
         
         #Initialize text output to GUI
         sys.stdout = OutLog(self.console, sys.stdout)
-        sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -83,7 +83,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Set up menu callbacks
         self.action_load_files.triggered.connect(self.select_wav_files)
         self.action_load_folder.triggered.connect(self.select_wav_folder)
-        self.action_load_nn.triggered.connect(self.select_neural_net_file)
+        self.action_load_nn.triggered.connect(self.load_neural_net)
         
         self.action_new_nn.triggered.connect(self.create_new_neural_net)
         
@@ -103,6 +103,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.action_find_current_motifs.triggered.connect(
                 lambda: self.find_motifs('current'))
         
+        self.action_pickle_active_song.triggered.connect(self.pickle_active_song)
+        self.action_unpickle_song.triggered.connect(self.unpickle_song)
         
         self.song_table.cellDoubleClicked.connect(
                 lambda r, c: self.table_clicked('songs', r))
@@ -112,35 +114,41 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
-                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(16,3,1,)},
+                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
-                {'type':'Dense', 'args':(128,)},
+                {'type':'Dense', 'args':(256,)},
+                {'type':'Activation', 'args':('relu',)},
+                {'type':'Dropout', 'args':(0.5,)},
+                {'type':'Dense', 'args':(32,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
         
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
-                       'freq_downsample_disp':1, 'display_threshold':-400, 
-                       'split':600, 'vmin':-90, 'vmax':-20, 'nfft':512, 
+                       'freq_downsample_disp':1, 
+                       'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
-                       'process_chunk_s':15, 'layers':defaultlayers, 
+                       'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
+                       'min_freq':440.0, 'epochs':3,
+                       'batch_size':50, 'validation_split':0.05,
+                       'img_cols':1, 'img_rows':128,
                        }
-            
+        
         self.analyzer = AudioAnalyzer(**self.params)
+        
         self.player = pyaudio.PyAudio()
         
         self.canvas.draw_idle()
         self.show()
         
         self.logger.info('Finished with initialization')
-    
+
     
     def set_canvas(self, canvas, loc):
         """Set the SpectrogramCanvas for this GUI
@@ -180,8 +188,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
         self.logger.info('selected %s', str(folder_name))
         if folder_name:
-            pass
-            self.load_wav_files(self.find_files(str(folder_name), '*.wav'))
+            files = self.find_files(str(folder_name), '*.wav') + self.find_files(str(folder_name), '*.WAV')
+            self.load_wav_files(files)
         else:
             self.logger.debug('Cancelled file select')
 
@@ -229,11 +237,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         namecol = QtGui.QTableWidgetItem(sf.name)
 
         m, s = divmod(sf.start, 60)
-        
         startcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
         
         m, s = divmod(sf.length, 60)
-        
         lengthcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
         
         return [namecol, startcol, lengthcol]
@@ -251,47 +257,98 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.show_active_song()
     
     @QtCore.pyqtSlot()      
-    def select_neural_net_file(self):
-        """Load one or more wav files as SongFiles"""
-        self.logger.debug('Clicked the file select button')
+    def load_neural_net(self):
+        """Load a folder containing the files necessary to specify a neural net"""
+        self.logger.debug('Clicked the NN load button')
               
-        file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', 
-                '/home', 'Neural Net files (*.nn)')
-        if file_names:
-            self.load_wav_files(file_names)
+        folder = str(QtGui.QFileDialog.getExistingDirectory(parent=self, 
+                caption='Select a folder containing the required NN files'))
+        
+        if folder:
+            try:
+                net = self.analyzer.load_neural_net(folder)
+            except (IOError, KeyError):
+                self.logger.error('No valid neural net in that file')
+            else:
+                self.analyzer.classifier = net
+                shape = self.analyzer.classifier.layers[0].input_shape
+                self.params['img_rows'] = shape[2]
+                self.params['img_cols'] = shape[3]
+                self.analyzer.params['img_rows'] = shape[2]
+                self.analyzer.params['img_cols'] = shape[3]
         else:
-            self.logger.debug('Cancelled file select')
+            self.logger.debug('Cancelled loading of neural net')
     
     @QtCore.pyqtSlot()              
     def create_new_neural_net(self):
         """Uses the Analyzer's active_song to construct and train a neural net"""
-        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
+        self.analyzer.classifier = self.analyzer.build_neural_net()
         
         #then, train it
+        self.analyzer.train_neural_net()
     
     @QtCore.pyqtSlot()          
     def save_neural_net(self):
         """Save the analyzer's current neural net to a file to avoid training"""
-        pass
+        self.logger.debug('Clicked the NN save button')
+              
+        fullpath = str(QtGui.QFileDialog.getSaveFileName(parent=self, 
+                caption='Enter folder name to save the required NN files'))
+        
+        if fullpath:
+            self.logger.info('Saving NN to %s', fullpath)
+            if not os.path.exists(fullpath):
+                os.makedirs(fullpath)
+            self.analyzer.export_neural_net(fullpath)
+        else:
+            self.logger.debug('Cancelled save neural net')
+            
+        self.logger.info('Neural net saved!')
+            
+    @QtCore.pyqtSlot()
+    def unpickle_song(self):
+        """Load a pickled song with its classification and make it active"""
+        self.logger.debug('Clicked the unpickle song button')
+        
+        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Select pickled song', 
+                '', 'PICKLE files (*.pkl)')
+        
+        if file_name:
+            sf = SongFile.unpickle(file_name)
+            self.analyzer.songs.append(sf)
+            self.analyzer.set_active(sf)
+            self.update_table('songs')
+            self.show_active_song()
+        else:
+            self.logger.debug('Cancelled file select')
+    
+    @QtCore.pyqtSlot()       
+    def pickle_active_song(self):
+        """Save the active song as a pickle file, preserving classification"""
+        self.logger.debug('Clicked the pickle active song button')
+        
+        destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
+                    'Choose location for pickled song'))
+        
+        self.analyzer.active_song.pickle(destination=destination)
 
     @QtCore.pyqtSlot()              
     def save_motifs(self, mode):
         if mode == 'all':
-            folder_name = QtGui.QFileDialog.getExistingDirectory(self, 'Select folder')
+            folder_name = str(QtGui.QFileDialog.getExistingDirectory(self, 
+                    'Select folder'))
             
             for mf in self.analyzer.motifs:
                 mf.export(destination=folder_name)
             
         elif mode == 'current':
-            folder_name = QtGui.QFileDialog.getSaveFileName(self, 'Enter motif file name')
-            
-            
-        else:
-            #Get a filename, put it there
-            try:
-                self.analyzer.motifs[mode].export()
-            except TypeError:
-                self.logger.error('Unknown motif export mode, cannot export')
+            file_name = str(QtGui.QFileDialog.getSaveFileName(self, 
+                    'Choose filename and save location'))
+            self.analyzer.active_song.export(
+                    destination=os.path.dirname(file_name), 
+                    filename=os.path.basename(file_name)
+                    )
+
 
     @QtCore.pyqtSlot()            
     def click_play_button(self):
@@ -353,7 +410,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         This function assumes all preprocessing has been completed and merely
         looks at the state of the model and displays it
         """
-                
+        self.logger.info('Beginning plot of spectrogram... please wait')  
         for p in ['spectrogram', 'classification', 'entropy', 'power']:
             self.plot(p)
         
@@ -367,7 +424,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         select tool, the keypress will assign the value of that number to be
         the classification of the selected region
         """
-                
         if (e.text() in [str(i) for i in range(10)] and 
                 self.canvas.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time, 
@@ -400,19 +456,20 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.warning('Missing frequency domain display downsampling ratio')
             f_step = 1
             
-        try:   
+        try:  
+            title = 'Active Song: '+str(self.analyzer.active_song)
             time = self.analyzer.active_song.time[::t_step]
             freq = self.analyzer.active_song.freq[::f_step]
             classification = self.analyzer.active_song.classification[::t_step]
             entropy = self.analyzer.active_song.entropy[::t_step]
             power = self.analyzer.active_song.power[::t_step]
-            disp_Sxx = np.flipud(self.analyzer.Sxx[::t_step, ::f_step])
+            disp_Sxx = 10*np.log10(np.flipud(self.analyzer.Sxx[::t_step, ::f_step]))
         except AttributeError:
             self.logger.warning('No active song, cannot display plot %s', plot_type)
             return
         
         if plot_type == 'spectrogram':
-            self.canvas.display_spectrogram(time, freq, disp_Sxx, **self.params)
+            self.canvas.display_spectrogram(time, freq, disp_Sxx, title=title, **self.params)
         elif plot_type == 'classification':
             show = self.classes_checkbox.isChecked()
             self.canvas.display_classification(time, classification, show=show)
@@ -427,7 +484,18 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
     @QtCore.pyqtSlot(str)    
     def auto_classify(self, mode):
-        pass
+        try:
+            if mode == 'all':
+                for sf in self.analyzer.songs:
+                    self.analyzer.set_active(sf)
+                    self.analyzer.classify_active()
+                
+            elif mode == 'current':
+                    self.analyzer.classify_active()
+                    self.show_active_song()
+        except AttributeError:
+            self.logger.error('No neural net yet trained, cannot classify songs')
+        
 
     @QtCore.pyqtSlot(str)    
     def find_motifs(self, mode):
@@ -437,7 +505,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 
             self.update_table('motifs')
             
-        if mode == 'current':
+        elif mode == 'current':
             self.analyzer.motifs += SongFile.find_motifs(self.analyzer.active_song, **self.params)
             self.update_table('motifs')
        
@@ -728,6 +796,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         except KeyError:
             self.logger.warning('No parameter "vmax", using data maximum')
             vmax = np.max(Sxx)
+            
+        title = params.get('title', '')
         
         halfbin_time = (t[1] - t[0]) / 2.0
         halfbin_freq = (f[1] - f[0]) / 2.0
@@ -745,6 +815,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
                 vmax=vmax
                 )
         
+        ax.set_title(title, loc='left')
         ax.axis('tight')
 
         self.set_domain(self.extent[0:2])
@@ -770,8 +841,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             
         l, = ax.plot(t, classes, 'b-', scalex=False, scaley=False)
         
-        self.set_range('classification', (0, max(classes)+1))
-        
+        self.set_range('classification', (0, np.amax(classes)+1))
+        #self.set_range('classification', (0, 1))
         l.set_visible(show)
 
         self.draw_idle() 
@@ -792,6 +863,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         l, = ax.plot(t, entropy, 'g-', scalex=False, scaley=False)
            
         self.set_range('entropy', (min(entropy), max(entropy)))
+        #self.set_range('entropy', (0, 1))
 
         l.set_visible(show)
 
@@ -810,7 +882,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         l, = ax.plot(t, power, 'r-', scalex=False, scaley=False)
 
         self.set_range('power', (min(power), max(power)))
-        
+        #self.set_range('power', (0, 1))
+
         l.set_visible(show)
         
         self.draw_idle()        
@@ -1213,7 +1286,16 @@ class OutLog:
             self.edit.setTextColor(self.color)
 
         self.edit.moveCursor(QtGui.QTextCursor.End)
-        self.edit.insertPlainText( m )
+        #self.edit.insertPlainText( m )
+        
+        for char in m:
+            if char=='\b':
+                self.edit.textCursor().deletePreviousChar()
+            elif char=='\r':
+                pass #do not print \r characters
+            else:
+                self.edit.insertPlainText(char)
+                #self.edit.moveCursor(QtGui.QTextCursor.Right)
 
         if self.color:
             self.edit.setTextColor(tc)
@@ -1225,11 +1307,11 @@ class OutLog:
         pass
  
            
-def main():    
+def main():  
     app = QtGui.QApplication(sys.argv)
+      
     main = AudioGUI()
-    
     sys.exit(app.exec_())
-
+    
 if __name__ == '__main__':
     main()
