@@ -49,6 +49,7 @@ class AudioAnalyzer():
         All keyword arguments are gathered and stored in the instance's 
         self.params.  Keyword arguments relate to STFT parameters, 
         """        
+        
         #List of loaded songs
         self.songs = []
         self.motifs = []
@@ -164,8 +165,9 @@ class AudioAnalyzer():
         validation_split = self.params.get('validation_split', 0.25)
         
         
-        indices = np.arange(0,self.active_song.time.size-50)
-        (X_train, Y_train) = self.get_data_sample(indices)
+        indices = np.arange(0,self.active_song.time.size)
+        X_train = self.get_data_sample(indices)
+        Y_train = self.get_classification(indices)
 
         Y_train = np_utils.to_categorical(Y_train, nb_classes)
         
@@ -191,7 +193,29 @@ class AudioAnalyzer():
                 verbose=1, 
                 validation_data=(X_test, Y_test)
                 )
-
+    
+    def get_classification(self, idx):
+        """Docs"""
+        
+        img_rows = self.params.get('img_rows', self.Sxx.shape[0])
+        img_cols = self.params.get('img_cols', 1)
+        
+        if self.Sxx is None or self.active_song.classification is None:
+            raise TypeError('No active song from which to get data')
+        
+        if np.amax(idx) > self.Sxx.shape[1]:
+            raise IndexError('Data index of sample out of bounds, only {0} '
+                    'samples in the dataset'.format(self.Sxx.shape[1]-img_cols))
+        
+        if np.amin(idx) < 0:
+            raise IndexError('Data index of sample out of bounds, '
+                    'negative index requested')
+            
+        #index out the data   
+        classification = self.active_song.classification[idx]
+        
+        return classification
+        
 
     def get_data_sample(self, idx):
         """Get a sample from the spectrogram and the corresponding class
@@ -200,7 +224,7 @@ class AudioAnalyzer():
             idx: an ndarray of integer indices
         
         Returns:
-            (data, classification): a tuple where data is a 
+            data: data is a 
                 (1,1,img_rows,img_cols) slice from Sxx and classification is the 
                 corresponding integer class from self.active_song.classification
                 
@@ -214,7 +238,7 @@ class AudioAnalyzer():
         if self.Sxx is None or self.active_song.classification is None:
             raise TypeError('No active song from which to get data')
         
-        if np.amax(idx) > self.Sxx.shape[1]-img_cols:
+        if np.amax(idx) > self.Sxx.shape[1]:
             raise IndexError('Data index of sample out of bounds, only {0} '
                     'samples in the dataset'.format(self.Sxx.shape[1]-img_cols))
         
@@ -223,9 +247,9 @@ class AudioAnalyzer():
                     'negative index requested')
             
         #index out the data   
-        classification = self.active_song.classification[idx]
-
-        data_slices = [self.Sxx[0:img_rows, idx+i].T.reshape(idx.size, 1, img_rows) for i in range(img_cols)]
+        max_idx = (self.Sxx.shape[1]-1)        
+        
+        data_slices = [self.Sxx[0:img_rows, np.minimum(max_idx, idx+i)].T.reshape(idx.size, 1, img_rows) for i in range(img_cols)]
         data = np.stack(data_slices, axis=-1)
 
         #scale the input
@@ -233,18 +257,15 @@ class AudioAnalyzer():
         data -= np.amin(data)
         data /= np.amax(data)
         
-        return (data, classification)
+        return data
 
     def set_active(self, sf):
         """Select a SongFile from the current list and designate one as the 
         active SongFile
         """
         self.active_song = sf
-        
-        try:
-            self.Sxx = self.active_song.Sxx
-        except AttributeError:
-            self.Sxx = self.process(self.active_song)
+
+        self.Sxx = self.process(self.active_song)
     
     def process(self, sf):
         """Take a songfile and using its data, create the processed statistics
@@ -353,18 +374,58 @@ class AudioAnalyzer():
         """Creates a classification for the active song using classifier
         
         """
-        input = -np.log10(self.Sxx[:, :]).T
-        input /= np.max(input)
-        input = input.reshape(input.shape[0], 1, input.shape[1], 1)
-        prbs = self.classifier.predict_proba(input, batch_size=1000, verbose=1)
-
-        #prbs is an samples_x_classes array of likelihoods
-        #Need to smooth it, window it, and convert to categorie
-
+        
+        indices = np.arange(self.active_song.time.size)
+        input = self.get_data_sample(indices)
+                
+        prbs = self.classifier.predict_proba(input, batch_size=100, verbose=1).T
+        #for i in range(prbs.shape[1]):
+        #    print self.active_song.time[i], ':', prbs[:, i]
+         
+        #new_prbs = self.probs_to_classes(prbs)
+        #print new_prbs.shape
+#         for i in range(new_prbs.shape[1]):
+#             print self.active_song.time[i], ':', new_prbs[:, i]
+        
+        unfiltered_classes = self.probs_to_classes(prbs)
+        
+        #no need to be wasteful, filter if there is a filter
+        try:
+            medfilt_time = self.params['medfilt_time']
+        except KeyError:
+            filtered_classes = unfiltered_classes
+        else:
+            dt = self.active_song.time[1]-self.active_song.time[0]
+            windowsize = int(np.round(medfilt_time/dt))
+            windowsize = windowsize + (windowsize+1)%2
+            
+            filtered_classes = signal.medfilt(unfiltered_classes, windowsize)
+        
+        self.active_song.classification = filtered_classes
+    
+    def probs_to_classes(self, probabilities):
+        """Takes a likelihood matrix produced by predict_proba and returns
+        the classification for each entry
+        
+        Naive argmax returns a very noisy signal - windowing helps focus on
+        strongly matching areas.
+        """
+        smooth_time = self.params.get('smooth_time', 0.1)
+        dt = self.active_song.time[1]-self.active_song.time[0]
+        windowsize = np.round(smooth_time/dt)
+        window = signal.get_window('hamming', int(windowsize))
+        window /= np.sum(window)
+        
+        num_classes = probabilities.shape[0]
+        
+        smooth_prbs = [np.convolve(probabilities[i, :], window, mode='same') for i in range(num_classes)]
+        
+        return np.argmax(np.stack(smooth_prbs, axis=0), axis=0)
+    
 class SongFile(object):
     """Class for storing data related to each song
     
-    Critical values like entropy, STFT, and amplitude are not held in this class
+    Critical values like STFT are not held in this class
     because they are memory expensive.  Only one set of critical values will
     be stored in memory at a time, and that will be for the active song as
     determined by the AudioAnalyzer class.
@@ -414,7 +475,7 @@ class SongFile(object):
     @property
     def num_classes(self):
         return len(np.unique(self.classification))
-        
+    
     @classmethod
     def load(cls, filename, split=600, downsampling=None):
         """Loads a file, splitting it into multiple SongFiles if necessary

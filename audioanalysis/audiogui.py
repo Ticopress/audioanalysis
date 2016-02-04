@@ -19,6 +19,7 @@ FOR A PARTICULAR PURPOSE. Seedea the GNU General Public License for more details
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
+
 import sys, os, time, fnmatch
 
 from matplotlib.figure import Figure
@@ -59,10 +60,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize logging
         
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
+        sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -129,18 +130,18 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 ]
         
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
-                       'freq_downsample_disp':1, 'display_threshold':-400, 
+                       'freq_downsample_disp':1, 
                        'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
-                       'min_freq':440.0, 'epochs':1,
-                       'batch_size':50, 'validation_split':0.33,
-                       'snr':1, 'img_cols':1,
+                       'min_freq':440.0, 'epochs':3,
+                       'batch_size':50, 'validation_split':0.05,
+                       'img_cols':1, 'img_rows':128,
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
+        
         self.player = pyaudio.PyAudio()
         
         self.canvas.draw_idle()
@@ -270,6 +271,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 self.logger.error('No valid neural net in that file')
             else:
                 self.analyzer.classifier = net
+                shape = self.analyzer.classifier.layers[0].input_shape
+                self.params['img_rows'] = shape[2]
+                self.params['img_cols'] = shape[3]
+                self.analyzer.params['img_rows'] = shape[2]
+                self.analyzer.params['img_cols'] = shape[3]
         else:
             self.logger.debug('Cancelled loading of neural net')
     
@@ -418,7 +424,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         select tool, the keypress will assign the value of that number to be
         the classification of the selected region
         """
-                
         if (e.text() in [str(i) for i in range(10)] and 
                 self.canvas.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time, 
@@ -479,13 +484,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
     @QtCore.pyqtSlot(str)    
     def auto_classify(self, mode):
-        if mode == 'all':
-            for sf in self.analyzer.songs:
-                self.analyzer.set_active(sf)
-                self.analyzer.classify_active()
-            
-        elif mode == 'current':
-                self.analyzer.classify_active()
+        try:
+            if mode == 'all':
+                for sf in self.analyzer.songs:
+                    self.analyzer.set_active(sf)
+                    self.analyzer.classify_active()
+                
+            elif mode == 'current':
+                    self.analyzer.classify_active()
+                    self.show_active_song()
+        except AttributeError:
+            self.logger.error('No neural net yet trained, cannot classify songs')
         
 
     @QtCore.pyqtSlot(str)    
@@ -832,8 +841,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             
         l, = ax.plot(t, classes, 'b-', scalex=False, scaley=False)
         
-        self.set_range('classification', (0, max(classes)+1))
-        
+        self.set_range('classification', (0, np.amax(classes)+1))
+        #self.set_range('classification', (0, 1))
         l.set_visible(show)
 
         self.draw_idle() 
@@ -854,6 +863,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         l, = ax.plot(t, entropy, 'g-', scalex=False, scaley=False)
            
         self.set_range('entropy', (min(entropy), max(entropy)))
+        #self.set_range('entropy', (0, 1))
 
         l.set_visible(show)
 
@@ -872,7 +882,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         l, = ax.plot(t, power, 'r-', scalex=False, scaley=False)
 
         self.set_range('power', (min(power), max(power)))
-        
+        #self.set_range('power', (0, 1))
+
         l.set_visible(show)
         
         self.draw_idle()        
@@ -1275,7 +1286,16 @@ class OutLog:
             self.edit.setTextColor(self.color)
 
         self.edit.moveCursor(QtGui.QTextCursor.End)
-        self.edit.insertPlainText( m )
+        #self.edit.insertPlainText( m )
+        
+        for char in m:
+            if char=='\b':
+                self.edit.textCursor().deletePreviousChar()
+            elif char=='\r':
+                pass #do not print \r characters
+            else:
+                self.edit.insertPlainText(char)
+                #self.edit.moveCursor(QtGui.QTextCursor.Right)
 
         if self.color:
             self.edit.setTextColor(tc)
