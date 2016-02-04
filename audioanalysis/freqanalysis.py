@@ -49,6 +49,7 @@ class AudioAnalyzer():
         All keyword arguments are gathered and stored in the instance's 
         self.params.  Keyword arguments relate to STFT parameters, 
         """        
+        
         #List of loaded songs
         self.songs = []
         self.motifs = []
@@ -133,6 +134,7 @@ class AudioAnalyzer():
         
         return l
     
+    @threaded
     def load_neural_net(self, folder):
         """Load a neural net from json and h5 files exported with export_neural_net"""
         
@@ -263,11 +265,8 @@ class AudioAnalyzer():
         active SongFile
         """
         self.active_song = sf
-        
-        try:
-            self.Sxx = self.active_song.Sxx
-        except AttributeError:
-            self.Sxx = self.process(self.active_song)
+
+        self.Sxx = self.process(self.active_song)
     
     def process(self, sf):
         """Take a songfile and using its data, create the processed statistics
@@ -383,21 +382,16 @@ class AudioAnalyzer():
         #for i in range(prbs.shape[1]):
         #    print self.active_song.time[i], ':', prbs[:, i]
          
-        new_prbs = self.probs_to_classes(prbs)
-        print new_prbs.shape
+        #new_prbs = self.probs_to_classes(prbs)
+        #print new_prbs.shape
 #         for i in range(new_prbs.shape[1]):
 #             print self.active_song.time[i], ':', new_prbs[:, i]
-        medfilt_time = self.params.get('medfilt_time', 0.02)
-        dt = self.active_song.time[1]-self.active_song.time[0]
-        windowsize = int(np.round(medfilt_time/dt))
-        windowsize = windowsize + (windowsize+1)%2
+        #medfilt_time = self.params.get('medfilt_time', 0.02)
+        #dt = self.active_song.time[1]-self.active_song.time[0]
+        #windowsize = int(np.round(medfilt_time/dt))
+        #windowsize = windowsize + (windowsize+1)%2
 
-        self.active_song.classification = new_prbs[0, :]
-        self.active_song.entropy = new_prbs[1, :]
-        self.active_song.power = new_prbs[2, :]
-
-        #prbs is an samples_x_classes array of likelihoods
-        #Need to smooth it, window it, and convert to categorie
+        self.active_song.classification = self.probs_to_classes(prbs)
     
     def probs_to_classes(self, probabilities):
         """Takes a likelihood matrix produced by predict_proba and returns
@@ -409,14 +403,14 @@ class AudioAnalyzer():
         smooth_time = self.params.get('smooth_time', 0.1)
         dt = self.active_song.time[1]-self.active_song.time[0]
         windowsize = np.round(smooth_time/dt)
-        window = np.ones(int(windowsize))/windowsize
+        window = signal.get_window('hamming', int(windowsize))
+        window /= np.sum(window)
         
         num_classes = probabilities.shape[0]
         
         smooth_prbs = [np.convolve(probabilities[i, :], window, mode='same') for i in range(num_classes)]
         
-        return np.stack(smooth_prbs, axis=0)
-    
+        return np.argmax(np.stack(smooth_prbs, axis=0), axis=0)
     
 class SongFile(object):
     """Class for storing data related to each song
@@ -471,7 +465,7 @@ class SongFile(object):
     @property
     def num_classes(self):
         return len(np.unique(self.classification))
-        
+    
     @classmethod
     def load(cls, filename, split=600, downsampling=None):
         """Loads a file, splitting it into multiple SongFiles if necessary
