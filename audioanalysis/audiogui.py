@@ -19,6 +19,7 @@ FOR A PARTICULAR PURPOSE. Seedea the GNU General Public License for more details
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
+
 import sys, os, time, fnmatch
 
 from matplotlib.figure import Figure

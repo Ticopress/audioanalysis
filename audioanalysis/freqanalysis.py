@@ -134,7 +134,6 @@ class AudioAnalyzer():
         
         return l
     
-    @threaded
     def load_neural_net(self, folder):
         """Load a neural net from json and h5 files exported with export_neural_net"""
         
@@ -375,6 +374,7 @@ class AudioAnalyzer():
         """Creates a classification for the active song using classifier
         
         """
+        
         indices = np.arange(self.active_song.time.size)
         input = self.get_data_sample(indices)
                 
@@ -386,12 +386,22 @@ class AudioAnalyzer():
         #print new_prbs.shape
 #         for i in range(new_prbs.shape[1]):
 #             print self.active_song.time[i], ':', new_prbs[:, i]
-        #medfilt_time = self.params.get('medfilt_time', 0.02)
-        #dt = self.active_song.time[1]-self.active_song.time[0]
-        #windowsize = int(np.round(medfilt_time/dt))
-        #windowsize = windowsize + (windowsize+1)%2
-
-        self.active_song.classification = self.probs_to_classes(prbs)
+        
+        unfiltered_classes = self.probs_to_classes(prbs)
+        
+        #no need to be wasteful, filter if there is a filter
+        try:
+            medfilt_time = self.params['medfilt_time']
+        except KeyError:
+            filtered_classes = unfiltered_classes
+        else:
+            dt = self.active_song.time[1]-self.active_song.time[0]
+            windowsize = int(np.round(medfilt_time/dt))
+            windowsize = windowsize + (windowsize+1)%2
+            
+            filtered_classes = signal.medfilt(unfiltered_classes, windowsize)
+        
+        self.active_song.classification = filtered_classes
     
     def probs_to_classes(self, probabilities):
         """Takes a likelihood matrix produced by predict_proba and returns
