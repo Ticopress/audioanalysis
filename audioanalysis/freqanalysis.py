@@ -37,7 +37,34 @@ from keras.models import Sequential, model_from_json
 from keras.utils import np_utils
 from sklearn.cross_validation import train_test_split
 
-class AudioAnalyzer():
+from threading import Thread
+import Queue
+
+from PyQt4.QtCore import QObject, pyqtSignal
+
+def threaded(f, daemon=False):
+    def wrapped_f(q, *args, **kwargs):
+        '''this function calls the decorated function and puts the 
+        result in a queue'''
+        ret = f(*args, **kwargs)
+        q.put(ret)
+
+    def wrap(*args, **kwargs):
+        '''this is the function returned from the decorator. It fires off
+        wrapped_f in a new thread and returns the thread object with
+        the result queue attached'''
+
+        q = Queue.Queue()
+
+        t = Thread(target=wrapped_f, args=(q,)+args, kwargs=kwargs)
+        t.daemon = daemon
+        t.start()
+        t.result_queue = q        
+        return t
+
+    return wrap
+
+class AudioAnalyzer(QObject):
     """AudioAnalyzer docstring goes here TODO
     
     """
@@ -48,8 +75,8 @@ class AudioAnalyzer():
         
         All keyword arguments are gathered and stored in the instance's 
         self.params.  Keyword arguments relate to STFT parameters, 
-        """        
-        
+        """      
+                
         #List of loaded songs
         self.songs = []
         self.motifs = []
@@ -525,8 +552,7 @@ class SongFile(object):
             
         return sfs
     
-    @classmethod
-    def find_motifs(cls, sf, **params):
+    def find_motifs(self, **params):
         """Cut motifs from a classified songfile and build songfiles from them
         
         This method takes a SongFile, assumes it has already been correctly
@@ -536,39 +562,11 @@ class SongFile(object):
         
         Note: motifs are indicated anywhere the classification is nonzero.
         """
-        
-        min_dur=params.get('min_dur',0)
-        max_dur=params.get('max_dur', float('inf'))
-        smooth_gap=params.get('smooth_gap', 0)
             
         motifs = []
-        
-        try:
-            times = sf.time[np.nonzero(sf.classification)]
-        except TypeError:
-            sf.logger.info('Song %s does not have a classification, cannot '
-                    'find motifs', sf.name)
-            return []
-        
-        in_motif = False
-        
-        for i, t in enumerate(times):
-            if not in_motif:
-                start_time = t
-                in_motif = True
-                sf.logger.debug('Motif for %s start at %0.4f', sf.name, start_time)
-            
-            if in_motif and (i==len(times)-1 or times[i+1]-t > smooth_gap):
-                data = sf.data[sf.time_to_idx(start_time):sf.time_to_idx(t)]
-                #name and Fs are the same
-                new_motif = SongFile(data, sf.Fs, name=sf.name, start=start_time)
-                
-                motifs.append(new_motif)
-                in_motif = False
-                sf.logger.debug('Motif for %s end at %0.4f', sf.name, t)
 
         #Check that lengths satisfy the requirements
-        return [m for m in motifs if min_dur<=m.length<=max_dur]
+        return motifs
     
     def time_to_idx(self, t):
         return int(t * self.Fs)

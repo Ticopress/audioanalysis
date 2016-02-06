@@ -56,9 +56,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialization of GUI from Qt Designer
         super(AudioGUI, self).__init__()
         self.setupUi(self)
-        
-        #Initialize logging
-        
+                        
         #Initialize text output to GUI
         sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
@@ -141,6 +139,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
+        self.analyzer.busy.connect(self.update_during_events)
         
         self.player = pyaudio.PyAudio()
         
@@ -501,12 +500,13 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def find_motifs(self, mode):
         if mode == 'all':
             for sf in self.analyzer.songs:
-                self.analyzer.motifs += SongFile.find_motifs(sf, **self.params)
+                self.analyzer.motifs += sf.find_motifs(**self.params)
                 
             self.update_table('motifs')
             
         elif mode == 'current':
-            self.analyzer.motifs += SongFile.find_motifs(self.analyzer.active_song, **self.params)
+            active_s = self.analyzer.active_song
+            self.analyzer.motifs += active_s.find_motifs(**self.params)
             self.update_table('motifs')
        
     def find_files(self, directory, pattern):
@@ -515,6 +515,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         return [os.path.join(directory, fname) 
                 for fname in os.listdir(directory) 
                 if fnmatch.fnmatch(os.path.basename(fname), pattern)]
+        
+    def update_during_events(self):
+        self.app.process_events()
         
     
         
