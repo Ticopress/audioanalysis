@@ -532,13 +532,46 @@ class SongFile(object):
         through that classification and determines (with some resistance to 
         noise) the regions where there appears to be a motif.
         """
+        min_density = params.get('min_density', 0.5)
+        join_gap = params.get('join_gap', 1.0)
+        
+        regions = []
+        noise = True
+        for idx, val in enumerate(self.classification):
+            if val!=0 and noise:
+                start = idx
+                noise = False
             
+            if val==0 and not noise:
+                noise = True
+                regions.append((start, idx, 1.0))
+            
+
+        #time of first idx, time of last idx, density
+        regions = [(self.time[reg[0]], self.time[reg[1]], reg[2]) for reg in regions]
+        idx = 0
+        ops = 0
+        while idx < len(regions)-1:
+            left, right = regions[idx], regions[idx+1]
+            
+            prop = (left[2]*(left[1]-left[0])+right[2]*(right[1]-right[0]))/(right[1]-left[0])
+            
+            if prop > min_density and right[0]-left[1]<join_gap:
+                regions = regions[:idx] + [(left[0], right[1], prop)] + regions[idx+2:]
+                #print regions
+                idx = 0
+                continue
+            
+            idx += 1
+            ops += 1
+        print regions
+        print '{0} iteration operations required'.format(ops)       
         motifs = []
 
         return motifs
     
     def time_to_idx(self, t):
-        return int(t * self.Fs)
+        return int(t * self.Fs)        
     
     def __str__(self):
         return '{:s}_{:03d}_{:03d}'.format(

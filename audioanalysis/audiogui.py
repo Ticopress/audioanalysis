@@ -58,7 +58,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.setupUi(self)
                         
         #Initialize text output to GUI
-        sys.stdout = OutLog(self.console, sys.stdout)
+        #sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -112,9 +112,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
-                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
@@ -133,13 +133,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_freq':440.0, 'epochs':3,
+                       'min_freq':440.0, 'epochs':30,
                        'batch_size':50, 'validation_split':0.05,
                        'img_cols':1, 'img_rows':128,
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
-        self.analyzer.busy.connect(self.update_during_events)
         
         self.player = pyaudio.PyAudio()
         
