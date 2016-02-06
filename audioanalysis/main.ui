@@ -317,6 +317,11 @@
         <height>100</height>
        </size>
       </property>
+      <property name="font">
+       <font>
+        <family>Courier New</family>
+       </font>
+      </property>
       <property name="frameShadow">
        <enum>QFrame::Plain</enum>
       </property>

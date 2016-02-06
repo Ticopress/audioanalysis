@@ -129,7 +129,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1, 
-                       'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
+                       'split':600, 'vmin':-80, 'vmax':-40, 'nfft':512, 
                        'fft_time_window_ms':10, 'fft_time_step_ms':2, 
                        'process_chunk_s':30, 'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
@@ -514,10 +514,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         return [os.path.join(directory, fname) 
                 for fname in os.listdir(directory) 
                 if fnmatch.fnmatch(os.path.basename(fname), pattern)]
-        
-    def update_during_events(self):
-        self.app.process_events()
-        
     
         
 class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
