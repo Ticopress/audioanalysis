@@ -37,34 +37,7 @@ from keras.models import Sequential, model_from_json
 from keras.utils import np_utils
 from sklearn.cross_validation import train_test_split
 
-from threading import Thread
-import Queue
-
-from PyQt4.QtCore import QObject, pyqtSignal
-
-def threaded(f, daemon=False):
-    def wrapped_f(q, *args, **kwargs):
-        '''this function calls the decorated function and puts the 
-        result in a queue'''
-        ret = f(*args, **kwargs)
-        q.put(ret)
-
-    def wrap(*args, **kwargs):
-        '''this is the function returned from the decorator. It fires off
-        wrapped_f in a new thread and returns the thread object with
-        the result queue attached'''
-
-        q = Queue.Queue()
-
-        t = Thread(target=wrapped_f, args=(q,)+args, kwargs=kwargs)
-        t.daemon = daemon
-        t.start()
-        t.result_queue = q        
-        return t
-
-    return wrap
-
-class AudioAnalyzer(QObject):
+class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
     """
@@ -493,7 +466,6 @@ class SongFile(object):
     @property
     def domain(self):
         return (min(self.time), max(self.time))
-
         
     @property    
     def range(self):
@@ -559,13 +531,10 @@ class SongFile(object):
         classified and therefore has a classification that is not None, it scans
         through that classification and determines (with some resistance to 
         noise) the regions where there appears to be a motif.
-        
-        Note: motifs are indicated anywhere the classification is nonzero.
         """
             
         motifs = []
 
-        #Check that lengths satisfy the requirements
         return motifs
     
     def time_to_idx(self, t):
