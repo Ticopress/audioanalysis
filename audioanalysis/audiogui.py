@@ -61,7 +61,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -135,7 +135,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
                        'min_freq':440.0, 'epochs':30,
                        'batch_size':50, 'validation_split':0.05,
-                       'img_cols':1, 'img_rows':128,
+                       'img_cols':1, 'img_rows':128, 'power_threshold':-90
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)

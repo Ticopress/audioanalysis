@@ -388,18 +388,28 @@ class AudioAnalyzer():
 #             print self.active_song.time[i], ':', new_prbs[:, i]
         
         unfiltered_classes = self.probs_to_classes(prbs)
+        try:
+            power_threshold = self.params['power_threshold']
+        except KeyError:
+            thresholded_classes = unfiltered_classes
+        else:
+            self.logger.info('Thresholding at {0} dB'.format(power_threshold))
+            below_threshold = np.flatnonzero(10*np.log10(self.active_song.power) < power_threshold)
+            self.logger.info('{0} indices found with low power'.format(below_threshold.size))
+            thresholded_classes = unfiltered_classes
+            thresholded_classes[below_threshold] = 0
         
         #no need to be wasteful, filter if there is a filter
         try:
             medfilt_time = self.params['medfilt_time']
         except KeyError:
-            filtered_classes = unfiltered_classes
+            filtered_classes = thresholded_classes
         else:
             dt = self.active_song.time[1]-self.active_song.time[0]
             windowsize = int(np.round(medfilt_time/dt))
             windowsize = windowsize + (windowsize+1)%2
             
-            filtered_classes = signal.medfilt(unfiltered_classes, windowsize)
+            filtered_classes = signal.medfilt(thresholded_classes, windowsize)
         
         self.active_song.classification = filtered_classes
     
