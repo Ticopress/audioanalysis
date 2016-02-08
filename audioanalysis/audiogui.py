@@ -36,18 +36,6 @@ import numpy as np
 import logging, pyaudio
 
 from freqanalysis import AudioAnalyzer, SongFile
-     
-def threaded(fn):
-    def wrap(*args, **kwargs):
-        obj = Worker(lambda: fn(*args, **kwargs))
-        thread = Thread()
-        obj.moveToThread(thread)
-        obj.finished.connect(thread.quit)
-        thread.started.connect(obj.process)
-        thread.start()
-        return thread
-        
-    return wrap
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
@@ -128,9 +116,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     lambda *args: self.unpickle_song(),
             
             self.song_table.cellDoubleClicked:
-                    lambda r, c: self.table_clicked('songs', r),
+                    lambda r, c, *args: self.table_clicked('songs', r),
             self.motif_table.cellDoubleClicked:
-                    lambda r, c: self.table_clicked('motifs', r),
+                    lambda r, c, *args: self.table_clicked('motifs', r),
         }
         
         self.connect_signals(init=True)
@@ -177,15 +165,23 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def start_async_gui_call(self, fn):
         def new_fn(*args):
             self.set_signals_busy()
-            fn(*args)
-            self.connect_signals()
+            obj = Worker(fn)
+            thread = Thread(name=fn.func_name)
+            obj.moveToThread(thread)
+            obj.finished.connect(thread.quit)
+            thread.started.connect(lambda *a: obj.process(*args))
+            thread.finished.connect(self.end_async_gui_call)
+            self.threads.append(thread)
+            thread.start()
             
         return new_fn
     
-    def end_async_gui_call(self, thread):
-        self.threads.remove(thread)
+    def end_async_gui_call(self):
+        self.logger.debug('Ending async call')
+        self.threads = [t for t in self.threads if not t.isFinished()]
         
-        self.connect_signals()
+        if not self.threads:
+            self.connect_signals()
         
     def connect_signals(self, init=False):
         '''Connect all GUI control signals to their relevant slots
@@ -206,8 +202,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             #slot takes a known number of arguments (
             sig.connect(self.start_async_gui_call(slot))
     
-    
-    
     def set_signals_busy(self):
         '''Disconnect all signals and reroute them to busy_alert
         
@@ -224,6 +218,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         '''Function to call for all GUI signals when something is processing'''
         
         self.logger.info('Cannot execute that function during processing')
+        self.logger.info('Running processes are: ')
+        for t in self.threads:
+            self.logger.info('Thread {0} is running {1}'.format(id(t), t.name))
+            
     
     def set_canvas(self, canvas, loc):
         """Set the SpectrogramCanvas for this GUI
@@ -282,7 +280,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
             self.analyzer.songs.extend(new_songs)
             self.update_table('songs')
-                    
+    
     def update_table(self, name):
         """Display information on loaded SongFiles in the table"""
         if name=='songs':
@@ -413,7 +411,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     destination=os.path.dirname(file_name), 
                     filename=os.path.basename(file_name)
                     )
-
 
     def click_play_button(self):
         """Callback for clicking the GUI button"""
@@ -558,7 +555,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         except AttributeError:
             self.logger.error('No neural net yet trained, cannot classify songs')
         
-
     def find_motifs(self, mode):
         if mode == 'all':
             for sf in self.analyzer.songs:
@@ -1376,14 +1372,15 @@ class Worker(QtCore.QObject):
         self.fn = fn
 
     @QtCore.pyqtSlot()
-    def process(self):
+    def process(self, *args, **kwargs):
         print "Worker.process()"
-        self.fn()
+        self.fn(*args, **kwargs)
         self.finished.emit()
 
 class Thread(QtCore.QThread):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, name=''):
         QtCore.QThread.__init__(self, parent)
+        self.name = name
 
     # this class is solely needed for these two methods, there
     # appears to be a bug in PyQt 4.6 that requires you to
