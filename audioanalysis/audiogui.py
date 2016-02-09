@@ -34,6 +34,7 @@ from PyQt4.uic import loadUiType
 import numpy as np
 import logging, pyaudio
 
+import datetime
 
 from freqanalysis import AudioAnalyzer, SongFile
 from threadsafety import BGThread, SignalStream
@@ -47,10 +48,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     
     """
     
-    
     logger = logging.getLogger('JLAA')
-    printsig = QtCore.pyqtSignal(str)
-    
+        
     def __init__(self):
         """Create a new AudioGUI
         
@@ -62,17 +61,27 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                         
         #Initialize text output to GUI
         self.printerbox = OutLog(self.console)
-        self.printstream = SignalStream(self.printsig)
+        self.printstream = SignalStream()
         sys.stdout = self.printstream
-        self.printsig.connect(self.print_to_gui)
-                
-        self.handler = logging.StreamHandler(stream=self.printstream)
-        self.formatter = logging.Formatter(fmt='%(levelname)s: %(asctime)s from %(name)s in %(funcName)s\nMessage: %(message)s')
-        self.level = logging.DEBUG
-        self.handler.setLevel(self.level)
-        self.handler.setFormatter(self.formatter)
-        self.logger.addHandler(self.handler)
-        self.logger.setLevel(self.level)
+        self.printstream.write_signal.connect(self.print_to_gui)
+        
+        logdir = '/Users/new/Documents/Jarvis Lab/jarvis-lab-audio-analysis/data/logs'
+        logfile = datetime.datetime.now().strftime("%Y-%m-%d") + '.txt'     
+        file_handler = logging.FileHandler(filename=os.path.join(logdir, logfile))
+        file_format = logging.Formatter(fmt='%(levelname)s: %(asctime)s from %(name)s in %(funcName)s: %(message)s')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(file_format)
+        self.logger.addHandler(file_handler)
+        
+        screen_handler = logging.StreamHandler(stream=self.printstream)
+        screen_format = logging.Formatter(fmt='%(asctime)s - %(message)s')
+        screen_handler.setLevel(logging.INFO)
+        screen_handler.setFormatter(screen_format)
+        self.logger.addHandler(screen_handler)
+        
+        self.logger.setLevel(logging.DEBUG)
+        
+        self.logger.debug('Start of program execution {0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())

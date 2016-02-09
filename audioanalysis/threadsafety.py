@@ -36,10 +36,11 @@ class BGThread(QtCore.QThread):
     def name(self):
         return self.function.func_name
 
-class SignalStream(object):
+class SignalStream(QtCore.QObject):
+    write_signal = QtCore.pyqtSignal(str)
     
-    def __init__(self, signal):
-        self.write_signal = signal
+    def __init__(self):
+        super(SignalStream, self).__init__()
         
     def write(self, m):
         self.write_signal.emit(m)
