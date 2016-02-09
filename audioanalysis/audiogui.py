@@ -29,15 +29,17 @@ from matplotlib.backends.backend_qt4agg import (
 from matplotlib.backend_bases import cursors
 
 from PyQt4 import QtGui, QtCore
-from PyQt4.QtCore import pyqtSignal
 from PyQt4.uic import loadUiType
 
 import numpy as np
 import logging, pyaudio
 
+
 from freqanalysis import AudioAnalyzer, SongFile
+from threadsafety import BGThread, SignalStream
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
+
 
 class AudioGUI(Ui_MainWindow, QMainWindow):
     """The GUI for automatically identifying motifs
@@ -46,7 +48,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     """
     
     
-    logger = logging.getLogger('AudioGUI.logger')
+    logger = logging.getLogger('JLAA')
+    printsig = QtCore.pyqtSignal(str)
     
     def __init__(self):
         """Create a new AudioGUI
@@ -58,10 +61,18 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.setupUi(self)
                         
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
-        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
-        
-        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+        self.printerbox = OutLog(self.console)
+        self.printstream = SignalStream(self.printsig)
+        sys.stdout = self.printstream
+        self.printsig.connect(self.print_to_gui)
+                
+        self.handler = logging.StreamHandler(stream=self.printstream)
+        self.formatter = logging.Formatter(fmt='%(levelname)s: %(asctime)s from %(name)s in %(funcName)s\nMessage: %(message)s')
+        self.level = logging.DEBUG
+        self.handler.setLevel(self.level)
+        self.handler.setFormatter(self.formatter)
+        self.logger.addHandler(self.handler)
+        self.logger.setLevel(self.level)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -70,15 +81,25 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.set_canvas(canvas, self.plot_vl)
         
         #set up the dictionary of signals to their default slots
-        self.signals = {
+        self.blocking_signals = {
+                #self.play_button.clicked:
+                #    lambda *args: self.click_play_button(),
+                    
+                
+                self.entropy_checkbox.stateChanged:
+                        lambda *args: self.plot('entropy'),
+                self.power_checkbox.stateChanged:
+                        lambda *args: self.plot('power'),
+                self.classes_checkbox.stateChanged:
+                        lambda *args: self.plot('classification'),
+                }
+        
+        for sig, slot in self.blocking_signals.items():
+            sig.connect(slot)
+        
+        self.async_signals = {
             self.play_button.clicked:
-                lambda *args: self.click_play_button(),
-            self.entropy_checkbox.stateChanged:
-                    lambda *args: self.plot('entropy'),
-            self.power_checkbox.stateChanged:
-                    lambda *args: self.plot('power'),
-            self.classes_checkbox.stateChanged:
-                    lambda *args: self.plot('classification'),
+                    lambda *args: self.text_thread_test(),
             
             #Set up menu callbacks
             self.action_load_files.triggered:
@@ -166,23 +187,36 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.logger.info('Finished with initialization')
         
+    @QtCore.pyqtSlot(str)
+    def print_to_gui(self, text):
+        self.printerbox.write(text)
+        
+    def text_thread_test(self):
+        for _ in range(10):
+            print '{0} - not error text?'.format(time.time())
+            time.sleep(0.1)
+        for _ in range(10):
+            self.logger.info('{0} - info text?'.format(time.time()))
+            time.sleep(0.3)
+        for _ in range(10):
+            self.logger.error('{0} - error text?'.format(time.time()))
+            time.sleep(0.3)
+        
     def start_async_gui_call(self, fn):
-        def new_fn(*args):
+        def new_fn(*args, **kwargs):
             self.set_signals_busy()
-            obj = Worker(fn)
-            thread = Thread(name=fn.func_name)
-            obj.moveToThread(thread)
-            obj.finished.connect(thread.quit)
-            thread.started.connect(lambda *a: obj.process(*args))
-            thread.finished.connect(self.end_async_gui_call)
-            self.threads.append(thread)
-            thread.start()
-            
+            t = BGThread(fn, *args, **kwargs)
+            t.finished.connect(self.end_async_gui_call)
+            self.threads.append(t)
+            t.start()
+        
         return new_fn
     
     def end_async_gui_call(self):
         self.logger.debug('Ending async call')
         self.threads = [t for t in self.threads if not t.isFinished()]
+        
+        self.logger.info('Threads still running: {0}'.format([t.name for t in self.threads]))
         
         if not self.threads:
             self.connect_signals()
@@ -197,8 +231,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             init: boolean value indicating that this is the first time calling
                 the function
         '''
+        
         self.logger.debug('Connecting signals')
-        for sig, slot in self.signals.items():
+        for sig, slot in self.async_signals.items():
             if not init:
                 sig.disconnect()
             
@@ -214,7 +249,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         has been removed
         '''
         self.logger.debug('Setting signals as busy')
-        for sig in self.signals.keys():
+        for sig in self.async_signals.keys():
             sig.disconnect()
             sig.connect(self.busy_alert)
     
@@ -225,8 +260,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.info('Running processes are: ')
         for t in self.threads:
             self.logger.info('Thread {0} is running {1}'.format(id(t), t.name))
-            
-    
+           
     def set_canvas(self, canvas, loc):
         """Set the SpectrogramCanvas for this GUI
         
@@ -285,6 +319,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.analyzer.songs.extend(new_songs)
             self.update_table('songs')
     
+    #GUI method
     def update_table(self, name):
         """Display information on loaded SongFiles in the table"""
         if name=='songs':
@@ -416,6 +451,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     filename=os.path.basename(file_name)
                     )
 
+    #GUI method
     def click_play_button(self):
         """Callback for clicking the GUI button"""
         try:
@@ -469,6 +505,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return (data, pyaudio.paContinue)    
     
+    #GUI method
     def show_active_song(self):
         """Put all applicable data from the Model to the View
         
@@ -499,6 +536,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.plot('classification')
             self.canvas.set_selection(())  
     
+    #GUI method
     def plot(self, plot_type):
         """Show active song data on the plot
         
@@ -596,9 +634,9 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
     'navigate' method.  navigate corrects for any navigation not done by the 
     SpectrogramCanvas and then redraws.
     """
+    logger = logging.getLogger('JLAA.SpectogramCanvas')
     
     def __init__(self, figure_):
-        self.logger = logging.getLogger('SpectrogramCanvas.logger')
         
         #So, multiple inheritance is fun
         #This works if it goes QObject, FigureCanvas
@@ -976,9 +1014,10 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     """
     
     #List of signals for emitted by this class
-    navigate = pyqtSignal(dict)
-    set_marker = pyqtSignal(float)
-    set_selection = pyqtSignal(tuple)
+    navigate = QtCore.pyqtSignal(dict)
+    set_marker = QtCore.pyqtSignal(float)
+    set_selection = QtCore.pyqtSignal(tuple)
+    logger = logging.getLogger('JLAA.SpectrogramNavBar')
     
     def __init__(self, canvas_, parent_, *args, **kwargs):  
         """Creates a SpectrogramNavigationBar instance
@@ -987,7 +1026,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         """ 
         
         #initialize logging
-        self.logger = logging.getLogger('SpectrogramNavBar.logger')
             
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
@@ -1371,38 +1409,9 @@ class OutLog:
             
     def flush(self):
         pass
- 
 
-class Worker(QtCore.QObject):
-    finished = QtCore.pyqtSignal()
-    
-    def __init__(self, fn):
-        super(Worker, self).__init__()
-        self.fn = fn
 
-    @QtCore.pyqtSlot()
-    def process(self, *args, **kwargs):
-        print "Worker.process()"
-        self.fn(*args, **kwargs)
-        self.finished.emit()
-
-class Thread(QtCore.QThread):
-    def __init__(self, parent=None, name=''):
-        QtCore.QThread.__init__(self, parent)
-        self.name = name
-
-    # this class is solely needed for these two methods, there
-    # appears to be a bug in PyQt 4.6 that requires you to
-    # explicitly call run and start from the subclass in order
-    # to get the thread to actually start an event loop
-
-    def start(self):
-        QtCore.QThread.start(self)
-
-    def run(self):
-        QtCore.QThread.run(self)
-
-           
+          
 def main():  
     app = QtGui.QApplication(sys.argv)
       

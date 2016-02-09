@@ -41,7 +41,7 @@ class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
     """
-    logger = logging.getLogger('AudioAnalyzer.logger')
+    logger = logging.getLogger('JLAA.AudioAnalyzer')
     
     def __init__(self, **params):
         """Create an AudioAnalyzer
@@ -345,13 +345,10 @@ class AudioAnalyzer():
             sf.classification = np.zeros(time_list.size)
         else:
             self.logger.debug('Size of classes: {0}; size of time: {1}'.format(sf.time.size, sf.classification.size))
-            if sf.classification.size >= sf.time.size:
-                #trim classification to size
-                sf.classification = sf.classification[0:sf.time.size]
-            else:
-                #pad to match size - difference will be small enough to not matter
-                dif = sf.time.size - sf.classification.size
-                sf.classification = np.pad(sf.classification, (0, dif), mode='constant')
+            if sf.classification.size != sf.time.size:
+                #linear interpolation to size (nearest neighbor)
+                indices = np.linspace(0, sf.classification.size, sf.time.size)
+                sf.classification = scipy.interpolate.interp1d(indices, sf.classification, kind='nearest', fill_value=0)
         
         return Sxx[0:nfft/2, :]
     
@@ -450,7 +447,7 @@ class SongFile(object):
     determined by the AudioAnalyzer class.
 
     Instead, this stores the basic song data: Fs, analog signal data"""
-    logger = logging.getLogger('SongFile.logger')
+    logger = logging.getLogger('JLAA.SongFile')
     
     def __init__(self, data, Fs, name='', start=0):
         """Create a SongFile for storing signal data
