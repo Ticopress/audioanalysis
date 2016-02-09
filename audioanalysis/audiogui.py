@@ -41,6 +41,17 @@ from threadsafety import BGThread, SignalStream
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
+#decorator for class functions
+def async_gui_call(fn):
+    def new_fn(self, *calling_args, **calling_kwargs):
+        self.set_signals_busy()
+        thread_fun = lambda: fn(self, *calling_args, **calling_kwargs)
+        t = BGThread(thread_fun, name=fn.func_name)
+        t.finished.connect(self.end_async_gui_call)
+        self.threads.append(t)
+        t.start()
+    
+    return new_fn
 
 class AudioGUI(Ui_MainWindow, QMainWindow):
     """The GUI for automatically identifying motifs
@@ -108,7 +119,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.async_signals = {
             self.play_button.clicked:
-                    lambda *args: self.text_thread_test(),
+                    lambda *args: self.text_thread_test('string', 2),
             
             #Set up menu callbacks
             self.action_load_files.triggered:
@@ -200,7 +211,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def print_to_gui(self, text):
         self.printerbox.write(text)
         
-    def text_thread_test(self):
+    @async_gui_call
+    def text_thread_test(self, strval, intval):
+        print 'Strval: {0} intval: {1}'.format(strval, intval)
         for _ in range(10):
             print '{0} - not error text?'.format(time.time())
             time.sleep(0.1)
@@ -210,16 +223,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         for _ in range(10):
             self.logger.error('{0} - error text?'.format(time.time()))
             time.sleep(0.3)
-        
-    def start_async_gui_call(self, fn):
-        def new_fn(*args, **kwargs):
-            self.set_signals_busy()
-            t = BGThread(fn, *args, **kwargs)
-            t.finished.connect(self.end_async_gui_call)
-            self.threads.append(t)
-            t.start()
-        
-        return new_fn
     
     def end_async_gui_call(self):
         self.logger.debug('Ending async call')
@@ -248,7 +251,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
             #slot is a function or lambda
             #slot takes a known number of arguments (
-            sig.connect(self.start_async_gui_call(slot))
+            sig.connect(slot)
     
     def set_signals_busy(self):
         '''Disconnect all signals and reroute them to busy_alert
@@ -460,7 +463,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     filename=os.path.basename(file_name)
                     )
 
-    #GUI method
     def click_play_button(self):
         """Callback for clicking the GUI button"""
         try:
@@ -489,7 +491,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.stream.start_stream()
  
-    
     def stop_playback(self):
         """Stop and close a PyAudio stream
         
@@ -593,19 +594,27 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
 
+    #TODO make not a gui method
     def auto_classify(self, mode):
+        start = time.time()
+        count = 0
         try:
             if mode == 'all':
                 for sf in self.analyzer.songs:
                     self.analyzer.set_active(sf)
                     self.analyzer.classify_active()
+                    count += 1
                 
             elif mode == 'current':
                     self.analyzer.classify_active()
                     self.show_active_song()
+                    count += 1
         except AttributeError:
             self.logger.error('No neural net yet trained, cannot classify songs')
-        
+        else:
+            self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
+    
+    #TODO make not a gui method
     def find_motifs(self, mode):
         start = time.time()
         count = 0
