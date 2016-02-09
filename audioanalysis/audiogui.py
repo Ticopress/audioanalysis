@@ -14,7 +14,7 @@ version.
 
 Audio Analysis is distributed in the hope that it will be useful, but WITHOUT 
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS 
-FOR A PARTICULAR PURPOSE. Seedea the GNU General Public License for more details.
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
@@ -503,16 +503,21 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
     @QtCore.pyqtSlot(str)    
     def find_motifs(self, mode):
+        start = time.time()
+        count = 0
         if mode == 'all':
             for sf in self.analyzer.songs:
                 self.analyzer.motifs += sf.find_motifs(**self.params)
-                
+                count += 1
             self.update_table('motifs')
             
         elif mode == 'current':
             active_s = self.analyzer.active_song
             self.analyzer.motifs += active_s.find_motifs(**self.params)
             self.update_table('motifs')
+            count += 1
+            
+        self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
        
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
