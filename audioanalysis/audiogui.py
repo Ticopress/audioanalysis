@@ -46,8 +46,9 @@ def async_gui_call(fn):
     def new_fn(self, *calling_args, **calling_kwargs):
         self.set_signals_busy()
         thread_fun = lambda: fn(self, *calling_args, **calling_kwargs)
-        t = BGThread(thread_fun, name=fn.func_name)
-        t.finished.connect(self.end_async_gui_call)
+        fnname = fn.func_name
+        t = BGThread(thread_fun, name=fnname)
+        t.finished.connect(lambda *a: self.end_async_gui_call(fnname))
         self.threads.append(t)
         t.start()
     
@@ -101,23 +102,14 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.set_canvas(canvas, self.plot_vl)
         
         #set up the dictionary of signals to their default slots
-        self.blocking_signals = {
-                #self.play_button.clicked:
-                #    lambda *args: self.click_play_button(),
+        self.signals = {
+            self.entropy_checkbox.stateChanged:
+                    lambda *args: self.plot('entropy'),
+            self.power_checkbox.stateChanged:
+                    lambda *args: self.plot('power'),
+            self.classes_checkbox.stateChanged:
+                    lambda *args: self.plot('classification'),
                     
-                
-                self.entropy_checkbox.stateChanged:
-                        lambda *args: self.plot('entropy'),
-                self.power_checkbox.stateChanged:
-                        lambda *args: self.plot('power'),
-                self.classes_checkbox.stateChanged:
-                        lambda *args: self.plot('classification'),
-                }
-        
-        for sig, slot in self.blocking_signals.items():
-            sig.connect(slot)
-        
-        self.async_signals = {
             self.play_button.clicked:
                     lambda *args: self.text_thread_test('string', 2),
             
@@ -159,6 +151,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.motif_table.cellDoubleClicked:
                     lambda r, c, *args: self.table_clicked('motifs', r),
         }
+        
+        
+        self.post_async_calls = {
+                'load_wav_files': [lambda: self.update_table('songs')]
+                
+                }
         
         self.connect_signals(init=True)
         self.threads = []
@@ -224,8 +222,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.error('{0} - error text?'.format(time.time()))
             time.sleep(0.3)
     
-    def end_async_gui_call(self):
-        self.logger.debug('Ending async call')
+    def end_async_gui_call(self, name):
+        self.logger.debug('Ending async call to {0}'.format(name))
+        
+        for f in self.post_async_calls[name]:
+            f()
+        
         self.threads = [t for t in self.threads if not t.isFinished()]
         
         self.logger.info('Threads still running: {0}'.format([t.name for t in self.threads]))
@@ -245,7 +247,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         '''
         
         self.logger.debug('Connecting signals')
-        for sig, slot in self.async_signals.items():
+        for sig, slot in self.signals.items():
             if not init:
                 sig.disconnect()
             
@@ -261,7 +263,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         has been removed
         '''
         self.logger.debug('Setting signals as busy')
-        for sig in self.async_signals.keys():
+        for sig in self.signals.keys():
             sig.disconnect()
             sig.connect(self.busy_alert)
     
@@ -286,9 +288,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             loc.addWidget(t)
             
         self.canvas = canvas
-        
-        #Connect any slots coming from canvas here
-        #-----slots-----
     
     def select_wav_files(self):
         """Load one or more wav files as SongFiles"""
@@ -314,6 +313,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.debug('Cancelled file select')
 
+    #@async_gui_call
     def load_wav_files(self, file_names):
         """Load a list of wave files as SongFiles"""
         
@@ -329,7 +329,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     len(new_songs))
             
             self.analyzer.songs.extend(new_songs)
-            self.update_table('songs')
+            #self.update_table('songs')
     
     #GUI method
     def update_table(self, name):
