@@ -334,17 +334,26 @@ class AudioAnalyzer():
            
         self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(Sxx))
         self.logger.debug('STFT dimensions %s', str(Sxx.shape))               
-
-        if sf.classification is None:
-            sf.classification = np.zeros(time_list.size) 
         
         sf.time = time_list
         sf.freq = freq[0:nfft/2]
         sf.entropy = self.calc_entropy(Sxx)
         sf.power = self.calc_power(Sxx)
         
+        
+        if sf.classification is None:
+            sf.classification = np.zeros(time_list.size)
+        else:
+            self.logger.debug('Size of classes: {0}; size of time: {1}'.format(sf.time.size, sf.classification.size))
+            if sf.classification.size >= sf.time.size:
+                #trim classification to size
+                sf.classification = sf.classification[0:sf.time.size]
+            else:
+                #pad to match size - difference will be small enough to not matter
+                dif = sf.time.size - sf.classification.size
+                sf.classification = np.pad(sf.classification, (0, dif), mode='constant')
+        
         return Sxx[0:nfft/2, :]
-    
     
     @staticmethod
     def butter_highpass(cutoff, fs, order=5):
@@ -535,14 +544,16 @@ class SongFile(object):
         return sfs
     
     def find_motifs(self, **params):
-        """Cut motifs from a classified songfile and build songfiles from them
+        """Cut motifs from a classified SongFile and build SongFiles from them
         
         This method takes a SongFile, assumes it has already been correctly
         classified and therefore has a classification that is not None, it scans
         through that classification and determines (with some resistance to 
         noise) the regions where there appears to be a motif.
         """
-        min_density = params.get('min_density', 0.5)
+        
+        min_density = params.get('min_density', 0.80)
+        min_dense_time = params.get('min_dense_time', 0.5)
         join_gap = params.get('join_gap', 1.0)
         
         regions = []
@@ -574,9 +585,46 @@ class SongFile(object):
             
             idx += 1
             ops += 1
-        print regions
-        print '{0} iteration operations required'.format(ops)       
+        
+        self.logger.debug(str(regions))
+        self.logger.debug('{0} iteration operations required'.format(ops))  
+        
+        idx = len(regions)-1 #start at end, latch backwards
+        final_regions = []
+        while idx > 0:
+            r = (regions[idx][0], regions[idx][1])
+            
+            #do not keep or use extremely short dense regions (blips)
+            if r[1]-r[0] < min_dense_time:
+                idx -= 1
+            else: #latch backwards
+                j = 1
+                preceding = regions[idx-j]
+                while r[0]-preceding[1] <= join_gap and idx-j >= 0:
+                    r = (preceding[0], r[1])
+                    j+=1
+                    preceding = regions[idx-j]
+                    
+                final_regions.append(r)
+                idx = idx-j
+                        
+        self.logger.debug(str(final_regions))
+        
         motifs = []
+        for r in reversed(final_regions):
+            left, right = self.time_to_idx(r[0]), self.time_to_idx(r[1])
+            
+            data = self.data[left:right]
+            Fs = self.Fs
+            
+            indices = np.searchsorted(self.time, np.asarray(r))
+            
+            classification = self.classification[indices[0]:indices[1]]
+            
+            sf = SongFile(data, Fs, name=self.name, start=self.time[indices[0]])
+            sf.classification = classification
+            
+            motifs.append(sf)
 
         return motifs
     

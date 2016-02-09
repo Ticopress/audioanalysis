@@ -127,15 +127,21 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
         
+        #So many
+        #spectrogram/display, net/training, classification/discovery
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
-                       'freq_downsample_disp':1, 
-                       'split':600, 'vmin':-80, 'vmax':-40, 'nfft':512, 
-                       'fft_time_window_ms':10, 'fft_time_step_ms':2, 
-                       'process_chunk_s':30, 'layers':defaultlayers, 
+                       'freq_downsample_disp':1,  'split':600, 'vmin':-80, 
+                       'vmax':-40, 'nfft':512, 'fft_time_window_ms':10, 
+                       'fft_time_step_ms':2, 'process_chunk_s':30, 
+                       
+                       'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_freq':440.0, 'epochs':30,
-                       'batch_size':50, 'validation_split':0.05,
-                       'img_cols':1, 'img_rows':128, 'power_threshold':-90
+                       'min_freq':440.0, 'epochs':30, 'batch_size':50, 
+                       'validation_split':0.05, 'img_cols':1, 'img_rows':128, 
+                       
+                       'power_threshold':-90, 'medfilt_time':0.01, 
+                       'smooth_time':0.1, 'join_gap':1.0, 'min_density':0.8, 
+                       'min_dense_time':0.5
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
@@ -235,10 +241,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         namecol = QtGui.QTableWidgetItem(sf.name)
 
         m, s = divmod(sf.start, 60)
-        startcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        startcol = QtGui.QTableWidgetItem("{:02d}:{:06.3f}".format(int(m), s))
         
         m, s = divmod(sf.length, 60)
-        lengthcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        lengthcol = QtGui.QTableWidgetItem("{:02d}:{:06.3f}".format(int(m), s))
         
         return [namecol, startcol, lengthcol]
     
