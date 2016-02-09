@@ -48,8 +48,8 @@ class AudioAnalyzer():
         
         All keyword arguments are gathered and stored in the instance's 
         self.params.  Keyword arguments relate to STFT parameters, 
-        """        
-        
+        """      
+                
         #List of loaded songs
         self.songs = []
         self.motifs = []
@@ -334,17 +334,26 @@ class AudioAnalyzer():
            
         self.logger.debug('Size of one STFT: %d bytes', sys.getsizeof(Sxx))
         self.logger.debug('STFT dimensions %s', str(Sxx.shape))               
-
-        if sf.classification is None:
-            sf.classification = np.zeros(time_list.size) 
         
         sf.time = time_list
         sf.freq = freq[0:nfft/2]
         sf.entropy = self.calc_entropy(Sxx)
         sf.power = self.calc_power(Sxx)
         
+        
+        if sf.classification is None:
+            sf.classification = np.zeros(time_list.size)
+        else:
+            self.logger.debug('Size of classes: {0}; size of time: {1}'.format(sf.time.size, sf.classification.size))
+            if sf.classification.size >= sf.time.size:
+                #trim classification to size
+                sf.classification = sf.classification[0:sf.time.size]
+            else:
+                #pad to match size - difference will be small enough to not matter
+                dif = sf.time.size - sf.classification.size
+                sf.classification = np.pad(sf.classification, (0, dif), mode='constant')
+        
         return Sxx[0:nfft/2, :]
-    
     
     @staticmethod
     def butter_highpass(cutoff, fs, order=5):
@@ -388,18 +397,28 @@ class AudioAnalyzer():
 #             print self.active_song.time[i], ':', new_prbs[:, i]
         
         unfiltered_classes = self.probs_to_classes(prbs)
+        try:
+            power_threshold = self.params['power_threshold']
+        except KeyError:
+            thresholded_classes = unfiltered_classes
+        else:
+            self.logger.info('Thresholding at {0} dB'.format(power_threshold))
+            below_threshold = np.flatnonzero(10*np.log10(self.active_song.power) < power_threshold)
+            self.logger.info('{0} indices found with low power'.format(below_threshold.size))
+            thresholded_classes = unfiltered_classes
+            thresholded_classes[below_threshold] = 0
         
         #no need to be wasteful, filter if there is a filter
         try:
             medfilt_time = self.params['medfilt_time']
         except KeyError:
-            filtered_classes = unfiltered_classes
+            filtered_classes = thresholded_classes
         else:
             dt = self.active_song.time[1]-self.active_song.time[0]
             windowsize = int(np.round(medfilt_time/dt))
             windowsize = windowsize + (windowsize+1)%2
             
-            filtered_classes = signal.medfilt(unfiltered_classes, windowsize)
+            filtered_classes = signal.medfilt(thresholded_classes, windowsize)
         
         self.active_song.classification = filtered_classes
     
@@ -466,7 +485,6 @@ class SongFile(object):
     @property
     def domain(self):
         return (min(self.time), max(self.time))
-
         
     @property    
     def range(self):
@@ -525,53 +543,93 @@ class SongFile(object):
             
         return sfs
     
-    @classmethod
-    def find_motifs(cls, sf, **params):
-        """Cut motifs from a classified songfile and build songfiles from them
+    def find_motifs(self, **params):
+        """Cut motifs from a classified SongFile and build SongFiles from them
         
         This method takes a SongFile, assumes it has already been correctly
         classified and therefore has a classification that is not None, it scans
         through that classification and determines (with some resistance to 
         noise) the regions where there appears to be a motif.
-        
-        Note: motifs are indicated anywhere the classification is nonzero.
         """
         
-        min_dur=params.get('min_dur',0)
-        max_dur=params.get('max_dur', float('inf'))
-        smooth_gap=params.get('smooth_gap', 0)
+        min_density = params.get('min_density', 0.80)
+        min_dense_time = params.get('min_dense_time', 0.5)
+        join_gap = params.get('join_gap', 1.0)
+        
+        regions = []
+        noise = True
+        for idx, val in enumerate(self.classification):
+            if val!=0 and noise:
+                start = idx
+                noise = False
             
-        motifs = []
-        
-        try:
-            times = sf.time[np.nonzero(sf.classification)]
-        except TypeError:
-            sf.logger.info('Song %s does not have a classification, cannot '
-                    'find motifs', sf.name)
-            return []
-        
-        in_motif = False
-        
-        for i, t in enumerate(times):
-            if not in_motif:
-                start_time = t
-                in_motif = True
-                sf.logger.debug('Motif for %s start at %0.4f', sf.name, start_time)
+            if val==0 and not noise:
+                noise = True
+                regions.append((start, idx, 1.0))
             
-            if in_motif and (i==len(times)-1 or times[i+1]-t > smooth_gap):
-                data = sf.data[sf.time_to_idx(start_time):sf.time_to_idx(t)]
-                #name and Fs are the same
-                new_motif = SongFile(data, sf.Fs, name=sf.name, start=start_time)
-                
-                motifs.append(new_motif)
-                in_motif = False
-                sf.logger.debug('Motif for %s end at %0.4f', sf.name, t)
 
-        #Check that lengths satisfy the requirements
-        return [m for m in motifs if min_dur<=m.length<=max_dur]
+        #time of first idx, time of last idx, density
+        regions = [(self.time[reg[0]], self.time[reg[1]], reg[2]) for reg in regions]
+        idx = 0
+        ops = 0
+        while idx < len(regions)-1:
+            left, right = regions[idx], regions[idx+1]
+            
+            prop = (left[2]*(left[1]-left[0])+right[2]*(right[1]-right[0]))/(right[1]-left[0])
+            
+            if prop > min_density and right[0]-left[1]<join_gap:
+                regions = regions[:idx] + [(left[0], right[1], prop)] + regions[idx+2:]
+                #print regions
+                idx = 0
+                continue
+            
+            idx += 1
+            ops += 1
+        
+        self.logger.debug(str(regions))
+        self.logger.debug('{0} iteration operations required'.format(ops))  
+        
+        idx = len(regions)-1 #start at end, latch backwards
+        final_regions = []
+        while idx > 0:
+            r = (regions[idx][0], regions[idx][1])
+            
+            #do not keep or use extremely short dense regions (blips)
+            if r[1]-r[0] < min_dense_time:
+                idx -= 1
+            else: #latch backwards
+                j = 1
+                preceding = regions[idx-j]
+                while r[0]-preceding[1] <= join_gap and idx-j >= 0:
+                    r = (preceding[0], r[1])
+                    j+=1
+                    preceding = regions[idx-j]
+                    
+                final_regions.append(r)
+                idx = idx-j
+                        
+        self.logger.debug(str(final_regions))
+        
+        motifs = []
+        for r in reversed(final_regions):
+            left, right = self.time_to_idx(r[0]), self.time_to_idx(r[1])
+            
+            data = self.data[left:right]
+            Fs = self.Fs
+            
+            indices = np.searchsorted(self.time, np.asarray(r))
+            
+            classification = self.classification[indices[0]:indices[1]]
+            
+            sf = SongFile(data, Fs, name=self.name, start=self.time[indices[0]])
+            sf.classification = classification
+            
+            motifs.append(sf)
+
+        return motifs
     
     def time_to_idx(self, t):
-        return int(t * self.Fs)
+        return int(t * self.Fs)        
     
     def __str__(self):
         return '{:s}_{:03d}_{:03d}'.format(

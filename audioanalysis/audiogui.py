@@ -14,7 +14,7 @@ version.
 
 Audio Analysis is distributed in the hope that it will be useful, but WITHOUT 
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS 
-FOR A PARTICULAR PURPOSE. Seedea the GNU General Public License for more details.
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
@@ -56,14 +56,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialization of GUI from Qt Designer
         super(AudioGUI, self).__init__()
         self.setupUi(self)
-        
-        #Initialize logging
-        
+                        
         #Initialize text output to GUI
-        sys.stdout = OutLog(self.console, sys.stdout)
+        #sys.stdout = OutLog(self.console, sys.stdout)
         #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
         
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
@@ -114,9 +112,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
-                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(32,3,1,), 'kwargs':{'border_mode':'same'}},
+                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
@@ -129,15 +127,21 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
         
+        #So many
+        #spectrogram/display, net/training, classification/discovery
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
-                       'freq_downsample_disp':1, 
-                       'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
-                       'fft_time_window_ms':10, 'fft_time_step_ms':2, 
-                       'process_chunk_s':30, 'layers':defaultlayers, 
+                       'freq_downsample_disp':1,  'split':600, 'vmin':-80, 
+                       'vmax':-40, 'nfft':512, 'fft_time_window_ms':10, 
+                       'fft_time_step_ms':2, 'process_chunk_s':30, 
+                       
+                       'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_freq':440.0, 'epochs':3,
-                       'batch_size':50, 'validation_split':0.05,
-                       'img_cols':1, 'img_rows':128,
+                       'min_freq':440.0, 'epochs':30, 'batch_size':50, 
+                       'validation_split':0.05, 'img_cols':1, 'img_rows':128, 
+                       
+                       'power_threshold':-90, 'medfilt_time':0.01, 
+                       'smooth_time':0.1, 'join_gap':1.0, 'min_density':0.8, 
+                       'min_dense_time':0.5
                        }
         
         self.analyzer = AudioAnalyzer(**self.params)
@@ -237,10 +241,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         namecol = QtGui.QTableWidgetItem(sf.name)
 
         m, s = divmod(sf.start, 60)
-        startcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        startcol = QtGui.QTableWidgetItem("{:02d}:{:06.3f}".format(int(m), s))
         
         m, s = divmod(sf.length, 60)
-        lengthcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        lengthcol = QtGui.QTableWidgetItem("{:02d}:{:06.3f}".format(int(m), s))
         
         return [namecol, startcol, lengthcol]
     
@@ -499,15 +503,21 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
     @QtCore.pyqtSlot(str)    
     def find_motifs(self, mode):
+        start = time.time()
+        count = 0
         if mode == 'all':
             for sf in self.analyzer.songs:
-                self.analyzer.motifs += SongFile.find_motifs(sf, **self.params)
-                
+                self.analyzer.motifs += sf.find_motifs(**self.params)
+                count += 1
             self.update_table('motifs')
             
         elif mode == 'current':
-            self.analyzer.motifs += SongFile.find_motifs(self.analyzer.active_song, **self.params)
+            active_s = self.analyzer.active_song
+            self.analyzer.motifs += active_s.find_motifs(**self.params)
             self.update_table('motifs')
+            count += 1
+            
+        self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
        
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
@@ -515,7 +525,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         return [os.path.join(directory, fname) 
                 for fname in os.listdir(directory) 
                 if fnmatch.fnmatch(os.path.basename(fname), pattern)]
-        
     
         
 class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
