@@ -134,7 +134,7 @@ class AudioAnalyzer():
         
         return l
     
-    def load_neural_net_callback(self, folder):
+    def load_neural_net(self, folder):
         """Load a neural net from json and h5 files exported with export_neural_net"""
         
         self.logger.info('Loading neural net model')
@@ -540,7 +540,7 @@ class SongFile(object):
             
         return sfs
     
-    def find_motifs_async(self, **params):
+    def find_motifs(self, **params):
         """Cut motifs from a classified SongFile and build SongFiles from them
         
         This method takes a SongFile, assumes it has already been correctly

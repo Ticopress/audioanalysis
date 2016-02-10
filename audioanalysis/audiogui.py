@@ -122,7 +122,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     lambda *args: self.load_neural_net_callback(),
             
             self.action_new_nn.triggered:
-                    lambda *args: self.create_new_neural_net_async(),
+                    lambda *args: self.create_new_neural_net_callback(),
             
             self.action_save_all_motifs.triggered:
                     lambda *args: self.save_motifs_callback('all'),
@@ -132,14 +132,14 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     lambda *args: self.save_neural_net_callback(),
             
             self.action_classify_all.triggered:
-                    lambda *args: self.auto_classify_async('all'),
+                    lambda *args: self.auto_classify_callback('all'),
             self.action_classify_current.triggered:
-                    lambda *args: self.auto_classify_async('current'),
+                    lambda *args: self.auto_classify_callback('current'),
             
             self.action_find_all_motifs.triggered:
-                    lambda *args: self.find_motifs_async('all'),
+                    lambda *args: self.find_motifs_callback('all'),
             self.action_find_current_motifs.triggered:
-                    lambda *args: self.find_motifs_async('current'),
+                    lambda *args: self.find_motifs_callback('current'),
             
             self.action_pickle_active_song.triggered:
                     lambda *args: self.pickle_song_callback(),
@@ -147,17 +147,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     lambda *args: self.unpickle_song_callback(),
             
             self.song_table.cellDoubleClicked:
-                    lambda r, c, *args: self.table_clicked_async('songs', r),
+                    lambda r, c, *args: self.table_clicked_callback('songs', r),
             self.motif_table.cellDoubleClicked:
-                    lambda r, c, *args: self.table_clicked_async('motifs', r),
+                    lambda r, c, *args: self.table_clicked_callback('motifs', r),
         }
         
         
         self.post_async_calls = {
                 'load_files_async': [lambda: self.update_table_callback('songs')],
                 'text_thread_test':[lambda: self.print_to_gui('closing test 1'), lambda: self.print_to_gui('closing test 2')],
-                'create_new_neural_net_async': [],
-                'table_clicked_async':[lambda: self.show_active_song_callback()],
+                'create_new_neural_net_callback': [],
+                'table_clicked_callback':[lambda: self.show_active_song_callback()],
                 }
         
         self.connect_signals(init=True)
@@ -364,6 +364,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return [namecol, startcol, lengthcol]
     
+    def table_clicked_callback(self, table, row):
+        self.table_clicked_async(table, row):
+    
     @async_gui_call
     def table_clicked_async(self, table, row):
         if table == 'motifs':
@@ -375,7 +378,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         #self.show_active_song_callback()
     
-    #TODO - make this GUI-free
     def load_neural_net_callback(self):
         """Load a folder containing the files necessary to specify a neural net"""
         self.logger.debug('Clicked the NN load button')
@@ -389,7 +391,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def load_neural_net_async(self, folder):
         if folder:
             try:
-                net = self.analyzer.load_neural_net_callback(folder)
+                net = self.analyzer.load_neural_net(folder)
             except (IOError, KeyError):
                 self.logger.error('No valid neural net in that file')
             else:
@@ -402,13 +404,22 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.debug('Cancelled loading of neural net')
     
+    
+    def create_new_neural_net_callback(self):
+        """Uses the Analyzer's active_song to construct and train a neural net"""
+        
+        self.create_new_neural_net_async()
+        
     @async_gui_call
     def create_new_neural_net_async(self):
-        """Uses the Analyzer's active_song to construct and train a neural net"""
+        start = time.time()
         self.analyzer.classifier = self.analyzer.build_neural_net()
         
         #then, train it
         self.analyzer.train_neural_net()
+        
+        self.logger.info('{0} seconds elapsed building and training the '
+                'classifier'.format(time.time()-start))
     
     def save_neural_net_callback(self):
         """Save the analyzer's current neural net to a file to avoid training"""
@@ -617,8 +628,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
 
+    def auto_classify_callback(self, mode):
+        self.auto_classify_async(mode)
+        
     @async_gui_call
     def auto_classify_async(self, mode):
+        
         start = time.time()
         count = 0
         try:
@@ -636,19 +651,22 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
     
+    def find_motifs_callback(self, mode):
+        self.find_motifs_callback(mode)
+    
     @async_gui_call
     def find_motifs_async(self, mode):
         start = time.time()
         count = 0
         if mode == 'all':
             for sf in self.analyzer.songs:
-                self.analyzer.motifs += sf.find_motifs_async(**self.params)
+                self.analyzer.motifs += sf.find_motifs(**self.params)
                 count += 1
             #self.update_table_callback('motifs')
             
         elif mode == 'current':
             active_s = self.analyzer.active_song
-            self.analyzer.motifs += active_s.find_motifs_async(**self.params)
+            self.analyzer.motifs += active_s.find_motifs(**self.params)
             #self.update_table_callback('motifs')
             count += 1
             
