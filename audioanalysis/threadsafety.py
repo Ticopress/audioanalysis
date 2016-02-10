@@ -3,8 +3,8 @@ Created on Feb 9, 2016
 
 @author: justinpalpant
 '''
-from PyQt4.QtCore import QThread, QObject, pyqtSignal, QTimer
-
+from PyQt4.QtCore import QThread, QObject, QTimer
+from PyQt4.QtCore import pyqtSignal, pyqtSlot
 
 class BGThread(QThread):
     '''
@@ -24,8 +24,7 @@ class BGThread(QThread):
         self.name = name
 
     def __del__(self):
-        '''Safe thread deletion'''
-        
+        '''Safe thread deletion... maybe bad if a thread is non-terminating'''
         self.wait()
 
     def run(self):
@@ -66,6 +65,7 @@ class SignalStream(QObject):
         '''Add the message in m to this stream's cache'''
         self.data.append(m)
         
+    @pyqtSlot()
     def flush(self):
         '''Write all data in the stream and clear the stream's cache'''
         if self.data:
