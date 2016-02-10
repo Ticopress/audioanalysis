@@ -384,7 +384,7 @@ class AudioAnalyzer():
         indices = np.arange(self.active_song.time.size)
         input = self.get_data_sample(indices)
                 
-        prbs = self.classifier.predict_proba(input, batch_size=100, verbose=1).T
+        prbs = self.classifier.predict_proba(input, batch_size=1000, verbose=1).T
         #for i in range(prbs.shape[1]):
         #    print self.active_song.time[i], ':', prbs[:, i]
          
