@@ -41,14 +41,14 @@ from threadsafety import BGThread, SignalStream
 
 Ui_MainWindow, QMainWindow = loadUiType('main.ui')
 
-#decorator for class functions
+#decorator for asynchronous class functions
 def async_gui_call(fn):
     def new_fn(self, *calling_args, **calling_kwargs):
         self.set_signals_busy()
         thread_fun = lambda: fn(self, *calling_args, **calling_kwargs)
         fnname = fn.func_name
         t = BGThread(thread_fun, name=fnname)
-        t.finished.connect(lambda *a: self.end_async_gui_call(fnname))
+        t.finished.connect(lambda *a: self.async_call_cleanup(fnname))
         self.threads.append(t)
         t.start()
     
@@ -152,12 +152,19 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     lambda r, c, *args: self.table_clicked_callback('motifs', r),
         }
         
-        
-        self.post_async_calls = {
+        #Enumerate functions to be called when each async call is terminated
+        self.async_cleanup_calls = {
                 'load_files_async': [lambda: self.update_table_callback('songs')],
                 'text_thread_test':[lambda: self.print_to_gui('closing test 1'), lambda: self.print_to_gui('closing test 2')],
-                'create_new_neural_net_callback': [],
-                'table_clicked_callback':[lambda: self.show_active_song_callback()],
+                'table_clicked_async':[lambda: self.show_active_song_callback()],
+                'load_neural_net_async': [],
+                'create_new_neural_net_async': [],
+                'save_neural_net_async':[],
+                'unpickle_song_async':[lambda: self.update_table_callback('songs'), lambda: self.show_active_song_callback()],
+                'pickle_song_async':[],
+                'save_motifs_async':[],
+                'auto_classify_async':[lambda: self.show_active_song_callback()],
+                'find_motifs_async':[lambda: self.update_table_callback('motifs')]
                 }
         
         self.connect_signals(init=True)
@@ -224,10 +231,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.logger.error('{0} - error text?'.format(time.time()))
             time.sleep(0.3)
     
-    def end_async_gui_call(self, name):
+    def async_call_cleanup(self, name):
         self.logger.debug('Ending async call to {0}'.format(name))
         
-        for f in self.post_async_calls[name]:
+        for f in self.async_cleanup_calls[name]:
             f()
         
         self.threads = [t for t in self.threads if not t.isFinished()]
@@ -289,7 +296,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
         self.canvas = canvas
     
-        
+    @QtCore.pyqtSlot()
     def select_files_callback(self):
         """Load one or more wav files as SongFiles"""
         self.logger.debug('Clicked the file select button')
@@ -301,6 +308,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.debug('Cancelled file select')
     
+    @QtCore.pyqtSlot()
     def select_folder_callback(self):
         """Load all .wav files in a folder and all its subfolders as SongFiles"""
         
@@ -331,6 +339,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
             self.analyzer.songs.extend(new_songs)
     
+    @QtCore.pyqtSlot(str)
     def update_table_callback(self, name):
         """Display information on loaded SongFiles in the table"""
         if name=='songs':
@@ -364,8 +373,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return [namecol, startcol, lengthcol]
     
+    @QtCore.pyqtSlot(str, int)
     def table_clicked_callback(self, table, row):
-        self.table_clicked_async(table, row):
+        self.table_clicked_async(table, row)
     
     @async_gui_call
     def table_clicked_async(self, table, row):
@@ -378,6 +388,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         #self.show_active_song_callback()
     
+    @QtCore.pyqtSlot()
     def load_neural_net_callback(self):
         """Load a folder containing the files necessary to specify a neural net"""
         self.logger.debug('Clicked the NN load button')
@@ -404,7 +415,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.debug('Cancelled loading of neural net')
     
-    
+    @QtCore.pyqtSlot()
     def create_new_neural_net_callback(self):
         """Uses the Analyzer's active_song to construct and train a neural net"""
         
@@ -421,6 +432,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.info('{0} seconds elapsed building and training the '
                 'classifier'.format(time.time()-start))
     
+    @QtCore.pyqtSlot()
     def save_neural_net_callback(self):
         """Save the analyzer's current neural net to a file to avoid training"""
         self.logger.debug('Clicked the NN save button')
@@ -442,6 +454,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
         self.logger.info('Neural net saved!')
             
+    @QtCore.pyqtSlot()
     def unpickle_song_callback(self):
         """Load a pickled song with its classification and make it active"""
         self.logger.debug('Clicked the unpickle song button')
@@ -457,11 +470,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             sf = SongFile.unpickle(file_name)
             self.analyzer.songs.append(sf)
             self.analyzer.set_active(sf)
-            self.update_table_callback('songs')
-            self.show_active_song_callback()
         else:
             self.logger.debug('Cancelled file select')
     
+    @QtCore.pyqtSlot()
     def pickle_song_callback(self):
         """Save the active song as a pickle file, preserving classification"""
         self.logger.debug('Clicked the pickle active song button')
@@ -475,6 +487,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def pickle_song_async(self, destination):
         self.analyzer.active_song.pickle(destination=destination)
 
+    @QtCore.pyqtSlot(str)
     def save_motifs_callback(self, mode):
         if mode == 'all':
             destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
@@ -497,7 +510,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     destination=os.path.dirname(destination), 
                     filename=os.path.basename(destination)
                     )
-
+    
+    @QtCore.pyqtSlot()
     def click_play_button_callback(self):
         """Callback for clicking the GUI button"""
         try:
@@ -550,6 +564,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return (data, pyaudio.paContinue)    
     
+    @QtCore.pyqtSlot()
     def show_active_song_callback(self):
         """Put all applicable data from the Model to the View
         
@@ -563,7 +578,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.canvas.set_marker(0)
         self.canvas.set_selection(())
         
-    #Interacts with the GUI
     def keyPressEvent(self, e):
         """Listens for a keypress
         
@@ -581,6 +595,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.plot('classification')
             self.canvas.set_selection(())  
     
+    @QtCore.pyqtSlot(str)
     def plot(self, plot_type):
         """Show active song data on the plot
         
@@ -628,6 +643,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
 
+    @QtCore.pyqtSlot(str)
     def auto_classify_callback(self, mode):
         self.auto_classify_async(mode)
         
@@ -651,6 +667,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
     
+    @QtCore.pyqtSlot(str)
     def find_motifs_callback(self, mode):
         self.find_motifs_callback(mode)
     
