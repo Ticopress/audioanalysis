@@ -35,6 +35,7 @@ import numpy as np
 import logging, pyaudio
 
 import datetime
+import collections
 
 from freqanalysis import AudioAnalyzer, SongFile
 from threadsafety import BGThread, SignalStream
@@ -73,7 +74,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                         
         #Initialize text output to GUI
         self.printerbox = OutLog(self.console)
-        self.printstream = SignalStream()
+        self.printstream = SignalStream(interval_ms=100)
         sys.stdout = self.printstream
         self.printstream.write_signal.connect(self.print_to_gui)
         
@@ -1446,47 +1447,43 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 class OutLog:
     '''OutLog pipes output from a stream to a QTextEdit widget
     
-    This class is taken exactly from stackoverflow
-    http://stackoverflow.com/questions/17132994/pyside-and-python-logging/17145093#17145093
     '''
     
     
-    def __init__(self, edit, out=None, color=None):
-        """(edit, out=None, color=None) -> can write stdout, stderr to a
-        QTextEdit.
-        edit = QTextEdit
-        out = alternate stream ( can be the original sys.stdout )
-        color = alternate color (i.e. color stderr a different color)
+    def __init__(self, edit, interval_ms=100):
+        """
+
         """
         self.edit = edit
-        self.out = None
-        self.color = color
+        self.cache = collections.deque()
+        
+        self.thread = QtCore.QThread()
+        self.timer = QtCore.QTimer()
+        self.timer.moveToThread(self.thread)
+        self.timer.setInterval(interval_ms)
+        self.timer.timeout.connect(self.flush)
+        self.thread.started.connect(self.timer.start)
+        self.thread.start()
 
     def write(self, m):
-        if self.color:
-            tc = self.edit.textColor()
-            self.edit.setTextColor(self.color)
-
-        self.edit.moveCursor(QtGui.QTextCursor.End)
-        #self.edit.insertPlainText( m )
-        
-        for char in m:
-            if char=='\b':
-                self.edit.textCursor().deletePreviousChar()
-            elif char=='\r':
-                pass #do not print \r characters
-            else:
-                self.edit.insertPlainText(char)
-                #self.edit.moveCursor(QtGui.QTextCursor.Right)
-
-        if self.color:
-            self.edit.setTextColor(tc)
-
-        if self.out:
-            self.out.write(m)
+        for char in str(m):
+            if char == '\b':
+                try:
+                    self.cache.pop() #efficient
+                except IndexError:
+                    self.edit.textCursor().deletePreviousChar() #awful?
+            elif char != '\r':
+                self.cache.append(char)
             
     def flush(self):
-        pass
+        self.edit.moveCursor(QtGui.QTextCursor.End)
+        
+        if self.cache:
+            self.edit.insertPlainText(''.join(self.cache))
+            self.cache = []
+        #----- do stuff ------
+        
+        self.edit.moveCursor(QtGui.QTextCursor.End)
 
 
           
