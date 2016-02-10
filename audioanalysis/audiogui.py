@@ -111,51 +111,53 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     lambda *args: self.plot('classification'),
                     
             self.play_button.clicked:
-                    lambda *args: self.text_thread_test('string', 2),
+                    lambda *args: self.click_play_button_callback(),
             
             #Set up menu callbacks
             self.action_load_files.triggered:
-                    lambda *args: self.select_wav_files(),
+                    lambda *args: self.select_files_callback(),
             self.action_load_folder.triggered:
-                    lambda *args: self.select_wav_folder(),
+                    lambda *args: self.select_folder_callback(),
             self.action_load_nn.triggered:
-                    lambda *args: self.load_neural_net(),
+                    lambda *args: self.load_neural_net_callback(),
             
             self.action_new_nn.triggered:
-                    lambda *args: self.create_new_neural_net(),
+                    lambda *args: self.create_new_neural_net_async(),
             
             self.action_save_all_motifs.triggered:
-                    lambda *args: self.save_motifs('all'),
+                    lambda *args: self.save_motifs_callback('all'),
             self.action_save_current_motif.triggered:
-                    lambda *args: self.save_motifs('current'),
+                    lambda *args: self.save_motifs_callback('current'),
             self.action_save_nn.triggered:
-                    lambda *args: self.save_neural_net(),
+                    lambda *args: self.save_neural_net_callback(),
             
             self.action_classify_all.triggered:
-                    lambda *args: self.auto_classify('all'),
+                    lambda *args: self.auto_classify_async('all'),
             self.action_classify_current.triggered:
-                    lambda *args: self.auto_classify('current'),
+                    lambda *args: self.auto_classify_async('current'),
             
             self.action_find_all_motifs.triggered:
-                    lambda *args: self.find_motifs('all'),
+                    lambda *args: self.find_motifs_async('all'),
             self.action_find_current_motifs.triggered:
-                    lambda *args: self.find_motifs('current'),
+                    lambda *args: self.find_motifs_async('current'),
             
             self.action_pickle_active_song.triggered:
-                    lambda *args: self.pickle_active_song(),
+                    lambda *args: self.pickle_song_callback(),
             self.action_unpickle_song.triggered:
-                    lambda *args: self.unpickle_song(),
+                    lambda *args: self.unpickle_song_callback(),
             
             self.song_table.cellDoubleClicked:
-                    lambda r, c, *args: self.table_clicked('songs', r),
+                    lambda r, c, *args: self.table_clicked_async('songs', r),
             self.motif_table.cellDoubleClicked:
-                    lambda r, c, *args: self.table_clicked('motifs', r),
+                    lambda r, c, *args: self.table_clicked_async('motifs', r),
         }
         
         
         self.post_async_calls = {
-                'load_wav_files': [lambda: self.update_table('songs')]
-                
+                'load_files_async': [lambda: self.update_table_callback('songs')],
+                'text_thread_test':[lambda: self.print_to_gui('closing test 1'), lambda: self.print_to_gui('closing test 2')],
+                'create_new_neural_net_async': [],
+                'table_clicked_async':[lambda: self.show_active_song_callback()],
                 }
         
         self.connect_signals(init=True)
@@ -229,9 +231,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             f()
         
         self.threads = [t for t in self.threads if not t.isFinished()]
-        
-        self.logger.info('Threads still running: {0}'.format([t.name for t in self.threads]))
-        
+                
         if not self.threads:
             self.connect_signals()
         
@@ -289,18 +289,19 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
         self.canvas = canvas
     
-    def select_wav_files(self):
+        
+    def select_files_callback(self):
         """Load one or more wav files as SongFiles"""
         self.logger.debug('Clicked the file select button')
               
         file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Select file(s)', 
                 '', 'WAV files (*.wav)')
         if file_names:
-            self.load_wav_files(file_names)
+            self.load_files_async(file_names)
         else:
             self.logger.debug('Cancelled file select')
     
-    def select_wav_folder(self):
+    def select_folder_callback(self):
         """Load all .wav files in a folder and all its subfolders as SongFiles"""
         
         self.logger.debug('Clicked the folder select button')
@@ -309,12 +310,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.info('selected %s', str(folder_name))
         if folder_name:
             files = self.find_files(str(folder_name), '*.wav') + self.find_files(str(folder_name), '*.WAV')
-            self.load_wav_files(files)
+            self.load_files_async(files)
         else:
             self.logger.debug('Cancelled file select')
 
-    #@async_gui_call
-    def load_wav_files(self, file_names):
+    @async_gui_call
+    def load_files_async(self, file_names):
         """Load a list of wave files as SongFiles"""
         
         for f in file_names:
@@ -329,10 +330,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     len(new_songs))
             
             self.analyzer.songs.extend(new_songs)
-            #self.update_table('songs')
     
-    #GUI method
-    def update_table(self, name):
+    def update_table_callback(self, name):
         """Display information on loaded SongFiles in the table"""
         if name=='songs':
             data = self.analyzer.songs
@@ -365,27 +364,32 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return [namecol, startcol, lengthcol]
     
-    def table_clicked(self, table, row):
+    @async_gui_call
+    def table_clicked_async(self, table, row):
         if table == 'motifs':
             self.analyzer.set_active(self.analyzer.motifs[row])
         elif table == 'songs':
             self.analyzer.set_active(self.analyzer.songs[row])
         else:
             self.logger.warning('Unknown table %s clicked, cannot display song', table)
-            return
         
-        self.show_active_song()
+        #self.show_active_song_callback()
     
-    def load_neural_net(self):
+    #TODO - make this GUI-free
+    def load_neural_net_callback(self):
         """Load a folder containing the files necessary to specify a neural net"""
         self.logger.debug('Clicked the NN load button')
               
         folder = str(QtGui.QFileDialog.getExistingDirectory(parent=self, 
                 caption='Select a folder containing the required NN files'))
         
+        self.load_neural_net_async(folder)
+        
+    @async_gui_call
+    def load_neural_net_async(self, folder):
         if folder:
             try:
-                net = self.analyzer.load_neural_net(folder)
+                net = self.analyzer.load_neural_net_callback(folder)
             except (IOError, KeyError):
                 self.logger.error('No valid neural net in that file')
             else:
@@ -398,20 +402,25 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.debug('Cancelled loading of neural net')
     
-    def create_new_neural_net(self):
+    @async_gui_call
+    def create_new_neural_net_async(self):
         """Uses the Analyzer's active_song to construct and train a neural net"""
         self.analyzer.classifier = self.analyzer.build_neural_net()
         
         #then, train it
         self.analyzer.train_neural_net()
     
-    def save_neural_net(self):
+    def save_neural_net_callback(self):
         """Save the analyzer's current neural net to a file to avoid training"""
         self.logger.debug('Clicked the NN save button')
               
         fullpath = str(QtGui.QFileDialog.getSaveFileName(parent=self, 
                 caption='Enter folder name to save the required NN files'))
         
+        self.save_neural_net_async(fullpath)
+        
+    @async_gui_call  
+    def save_neural_net_async(self, fullpath):
         if fullpath:
             self.logger.info('Saving NN to %s', fullpath)
             if not os.path.exists(fullpath):
@@ -422,48 +431,63 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             
         self.logger.info('Neural net saved!')
             
-    def unpickle_song(self):
+    def unpickle_song_callback(self):
         """Load a pickled song with its classification and make it active"""
         self.logger.debug('Clicked the unpickle song button')
         
         file_name = QtGui.QFileDialog.getOpenFileName(self, 'Select pickled song', 
                 '', 'PICKLE files (*.pkl)')
         
+        self.unpickle_song_async(file_name)
+    
+    @async_gui_call
+    def unpickle_song_async(self, file_name):
         if file_name:
             sf = SongFile.unpickle(file_name)
             self.analyzer.songs.append(sf)
             self.analyzer.set_active(sf)
-            self.update_table('songs')
-            self.show_active_song()
+            self.update_table_callback('songs')
+            self.show_active_song_callback()
         else:
             self.logger.debug('Cancelled file select')
     
-    def pickle_active_song(self):
+    def pickle_song_callback(self):
         """Save the active song as a pickle file, preserving classification"""
         self.logger.debug('Clicked the pickle active song button')
         
         destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
                     'Choose location for pickled song'))
         
+        self.pickle_song_async(destination)
+    
+    @async_gui_call
+    def pickle_song_async(self, destination):
         self.analyzer.active_song.pickle(destination=destination)
 
-    def save_motifs(self, mode):
+    def save_motifs_callback(self, mode):
         if mode == 'all':
-            folder_name = str(QtGui.QFileDialog.getExistingDirectory(self, 
+            destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
                     'Select folder'))
-            
-            for mf in self.analyzer.motifs:
-                mf.export(destination=folder_name)
-            
+            self.save_motifs_async(mode, destination)
+
         elif mode == 'current':
-            file_name = str(QtGui.QFileDialog.getSaveFileName(self, 
+            destination = str(QtGui.QFileDialog.getSaveFileName(self, 
                     'Choose filename and save location'))
+            self.save_motifs_async(mode, destination)
+
+    @async_gui_call
+    def save_motifs_async(self, mode, destination):
+        if mode == 'all':
+            for mf in self.analyzer.motifs:
+                mf.export(destination = destination)
+                
+        if mode == 'current':
             self.analyzer.active_song.export(
-                    destination=os.path.dirname(file_name), 
-                    filename=os.path.basename(file_name)
+                    destination=os.path.dirname(destination), 
+                    filename=os.path.basename(destination)
                     )
 
-    def click_play_button(self):
+    def click_play_button_callback(self):
         """Callback for clicking the GUI button"""
         try:
             if self.play_button.isChecked():
@@ -486,7 +510,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 channels=1,
                 rate=int(self.analyzer.active_song.Fs),
                 output=True,
-                stream_callback=self.play_audio_callback,
+                stream_callback=self.play_audio,
                 frames_per_buffer=4096)
         
         self.stream.start_stream()
@@ -500,7 +524,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.stream.stop_stream()
             self.stream.close()
 
-    def play_audio_callback(self, in_data, frame_count, time_info, status):
+    def play_audio(self, in_data, frame_count, time_info, status):
         """Callback for separate thread that plays audio
         
         This is responsible for moving the marker on the canvas, and since the
@@ -515,8 +539,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return (data, pyaudio.paContinue)    
     
-    #GUI method
-    def show_active_song(self):
+    def show_active_song_callback(self):
         """Put all applicable data from the Model to the View
         
         This function assumes all preprocessing has been completed and merely
@@ -529,6 +552,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.canvas.set_marker(0)
         self.canvas.set_selection(())
         
+    #Interacts with the GUI
     def keyPressEvent(self, e):
         """Listens for a keypress
         
@@ -546,7 +570,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.plot('classification')
             self.canvas.set_selection(())  
     
-    #GUI method
     def plot(self, plot_type):
         """Show active song data on the plot
         
@@ -594,8 +617,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
 
-    #TODO make not a gui method
-    def auto_classify(self, mode):
+    @async_gui_call
+    def auto_classify_async(self, mode):
         start = time.time()
         count = 0
         try:
@@ -607,30 +630,29 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 
             elif mode == 'current':
                     self.analyzer.classify_active()
-                    self.show_active_song()
                     count += 1
         except AttributeError:
             self.logger.error('No neural net yet trained, cannot classify songs')
         else:
             self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
     
-    #TODO make not a gui method
-    def find_motifs(self, mode):
+    @async_gui_call
+    def find_motifs_async(self, mode):
         start = time.time()
         count = 0
         if mode == 'all':
             for sf in self.analyzer.songs:
-                self.analyzer.motifs += sf.find_motifs(**self.params)
+                self.analyzer.motifs += sf.find_motifs_async(**self.params)
                 count += 1
-            self.update_table('motifs')
+            #self.update_table_callback('motifs')
             
         elif mode == 'current':
             active_s = self.analyzer.active_song
-            self.analyzer.motifs += active_s.find_motifs(**self.params)
-            self.update_table('motifs')
+            self.analyzer.motifs += active_s.find_motifs_async(**self.params)
+            #self.update_table_callback('motifs')
             count += 1
             
-        self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
+        self.logger.info('Took {0} seconds to find motifs in {1}'.format(time.time()-start, count))
        
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
