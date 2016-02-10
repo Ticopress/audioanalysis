@@ -95,9 +95,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.logger.debug('Start of program execution {0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         
+        #Set thread priority for the GUI thread to be non-laggy
+        QtCore.QThread.currentThread().setPriority(QtCore.QThread.HighPriority)
+        
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
-        toolbar = SpectrogramNavBar(canvas, self)
+        SpectrogramNavBar(canvas, self)
 
         self.set_canvas(canvas, self.plot_vl)
         
@@ -277,10 +280,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def busy_alert(self):
         '''Function to call for all GUI signals when something is processing'''
         
-        self.logger.info('Cannot execute that function during processing')
-        self.logger.info('Running processes are: ')
+        self.logger.warning('Cannot execute that function during processing')
+        self.logger.warning('Running processes are: ')
         for t in self.threads:
-            self.logger.info('Thread {0} is running {1}'.format(id(t), t.name))
+            self.logger.warning('Thread {0} is running {1}'.format(id(t), t.name))
            
     def set_canvas(self, canvas, loc):
         """Set the SpectrogramCanvas for this GUI
