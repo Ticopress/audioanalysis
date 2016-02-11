@@ -1466,25 +1466,27 @@ class OutLog:
         self.thread.start()
 
     def write(self, m):
+        #self.edit.moveCursor(QtGui.QTextCursor.End)
+        
         for char in str(m):
             if char == '\b':
-                try:
-                    self.cache.pop() #efficient
-                except IndexError:
-                    self.edit.textCursor().deletePreviousChar() #awful?
+                pass
+            #    try:
+            #        delchar = self.cache.pop() #efficient
+            #        if delchar == '\n':
+            #            self.cache.append(delchar)
+            #    except IndexError:
+            #        self.edit.textCursor().deletePreviousChar() #awful?
             elif char != '\r':
                 self.cache.append(char)
+            #self.cache.append(char)
             
-    def flush(self):
-        self.edit.moveCursor(QtGui.QTextCursor.End)
-        
+    @QtCore.pyqtSlot()
+    def flush(self):  
+        self.edit.moveCursor(QtGui.QTextCursor.End)      
         if self.cache:
             self.edit.insertPlainText(''.join(self.cache))
             self.cache = []
-        #----- do stuff ------
-        
-        self.edit.moveCursor(QtGui.QTextCursor.End)
-
 
           
 def main():  
