@@ -201,7 +201,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        
                        'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_freq':440.0, 'epochs':30, 'batch_size':50, 
+                       'min_freq':440.0, 'epochs':3, 'batch_size':50, 
                        'validation_split':0.05, 'img_cols':1, 'img_rows':128, 
                        
                        'power_threshold':-90, 'medfilt_time':0.01, 
@@ -1454,6 +1454,8 @@ class OutLog:
         """
 
         """
+        self.mutex = QtCore.QMutex()
+        
         self.edit = edit
         self.cache = collections.deque()
         
@@ -1467,26 +1469,29 @@ class OutLog:
 
     def write(self, m):
         #self.edit.moveCursor(QtGui.QTextCursor.End)
-        
+        locker = QtCore.QMutexLocker(self.mutex)
         for char in str(m):
             if char == '\b':
-                pass
-            #    try:
-            #        delchar = self.cache.pop() #efficient
-            #        if delchar == '\n':
-            #            self.cache.append(delchar)
-            #    except IndexError:
-            #        self.edit.textCursor().deletePreviousChar() #awful?
+                try:
+                    delchar = self.cache.pop() #efficient?
+                    if delchar == '\n':
+                        self.cache.append(delchar)
+                except IndexError:
+                    pass
+                    #self.edit.textCursor().deletePreviousChar() #awful?
             elif char != '\r':
                 self.cache.append(char)
             #self.cache.append(char)
             
     @QtCore.pyqtSlot()
     def flush(self):  
-        self.edit.moveCursor(QtGui.QTextCursor.End)      
+        locker = QtCore.QMutexLocker(self.mutex)
+        
         if self.cache:
+            self.edit.moveCursor(QtGui.QTextCursor.End)      
             self.edit.insertPlainText(''.join(self.cache))
             self.cache = []
+            self.edit.moveCursor(QtGui.QTextCursor.End)
 
           
 def main():  
