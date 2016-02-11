@@ -201,7 +201,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        
                        'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_freq':440.0, 'epochs':3, 'batch_size':50, 
+                       'min_freq':440.0, 'epochs':3, 'batch_size':100, 
                        'validation_split':0.05, 'img_cols':1, 'img_rows':128, 
                        
                        'power_threshold':-90, 'medfilt_time':0.01, 
@@ -1450,7 +1450,7 @@ class OutLog:
     '''
     
     
-    def __init__(self, edit, interval_ms=500):
+    def __init__(self, edit, interval_ms=200):
         """
 
         """
