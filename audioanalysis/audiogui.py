@@ -669,7 +669,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         except AttributeError:
             self.logger.error('No neural net yet trained, cannot classify songs')
         else:
-            self.logger.info('Took {0} seconds to classify {1} songs'.format(time.time()-start, count))
+            self.logger.info('Took {:2.3f} seconds to classify {1} songs'.format(time.time()-start, count))
     
     @QtCore.pyqtSlot(str)
     def find_motifs_callback(self, mode):
@@ -691,7 +691,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             #self.update_table_callback('motifs')
             count += 1
             
-        self.logger.info('Took {0} seconds to find motifs in {1}'.format(time.time()-start, count))
+        self.logger.info('Took {:2.3f} seconds to find motifs in {1}'.format(time.time()-start, count))
        
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
