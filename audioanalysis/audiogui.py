@@ -1450,11 +1450,12 @@ class OutLog:
     '''
     
     
-    def __init__(self, edit, interval_ms=100):
+    def __init__(self, edit, interval_ms=500):
         """
 
         """
         self.mutex = QtCore.QMutex()
+        self.flag = False
         
         self.edit = edit
         self.cache = collections.deque()
@@ -1468,24 +1469,28 @@ class OutLog:
         self.thread.start()
 
     def write(self, m):
-        #self.edit.moveCursor(QtGui.QTextCursor.End)
         locker = QtCore.QMutexLocker(self.mutex)
+
         for char in str(m):
             if char == '\b':
-                try:
+                if self.cache:
                     delchar = self.cache.pop() #efficient?
                     if delchar == '\n':
                         self.cache.append(delchar)
-                except IndexError:
-                    pass
-                    #self.edit.textCursor().deletePreviousChar() #awful?
+                else:
+                    self.edit.moveCursor(
+                            QtGui.QTextCursor.Left, mode=QtGui.QTextCursor.KeepAnchor)
+                    self.flag = True
             elif char != '\r':
                 self.cache.append(char)
-            #self.cache.append(char)
             
     @QtCore.pyqtSlot()
     def flush(self):  
         locker = QtCore.QMutexLocker(self.mutex)
+        
+        if self.flag:     
+            self.edit.textCursor().removeSelectedText()
+            self.flag = False
         
         if self.cache:
             self.edit.moveCursor(QtGui.QTextCursor.End)      
