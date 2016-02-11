@@ -3,7 +3,7 @@ Created on Feb 9, 2016
 
 @author: justinpalpant
 '''
-from PyQt4.QtCore import QThread, QObject, QTimer
+from PyQt4.QtCore import QThread, QObject, QTimer, QMutex, QMutexLocker
 from PyQt4.QtCore import pyqtSignal, pyqtSlot
 
 class BGThread(QThread):
@@ -54,6 +54,8 @@ class SignalStream(QObject):
         '''Create a SignalStream that emits text at least every interval_ms'''
         
         super(SignalStream, self).__init__()
+        self.mutex = QMutex()
+        
         self.data = []
         self.thread = QThread()
         
@@ -67,11 +69,15 @@ class SignalStream(QObject):
         
     def write(self, m):
         '''Add the message in m to this stream's cache'''
+        locker = QMutexLocker(self.mutex)
+
         self.data.append(m)
         
     @pyqtSlot()
     def flush(self):
         '''Write all data in the stream and clear the stream's cache'''
+        locker = QMutexLocker(self.mutex)
+        
         if self.data:
             self.write_signal.emit(''.join(self.data))
             self.data = []
