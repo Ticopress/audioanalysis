@@ -65,7 +65,10 @@ class SignalStream(QObject):
         self.timer.timeout.connect(self.flush)
         self.thread.started.connect(self.timer.start)
         self.thread.start()
-
+        
+    def __del__(self):
+        self.thread.quit()
+        self.thread.wait()
         
     def write(self, m):
         '''Add the message in m to this stream's cache'''
