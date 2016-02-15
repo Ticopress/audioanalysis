@@ -1490,11 +1490,15 @@ class OutLog:
 
         for char in str(m):
             if char == '\r':
-                self.edit.moveCursor(
-                        QtGui.QTextCursor.StartOfLine,
-                        mode=QtGui.QTextCursor.KeepAnchor
-                        )
-                self.flag = True
+                if not self.flag:
+                    self.edit.moveCursor(
+                            QtGui.QTextCursor.StartOfLine,
+                            mode=QtGui.QTextCursor.KeepAnchor
+                            )
+                
+                while char != '\n' and self.cache:
+                    char = self.cache.pop()
+                
             else:
                 self.cache.append(char)
             
