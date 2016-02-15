@@ -213,11 +213,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                        
                        'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_freq':440.0, 'epochs':30, 'batch_size':500, 
+                       'min_freq':440.0, 'epochs':30, 'batch_size':100, 
                        'validation_split':0.05, 'img_cols':1, 'img_rows':128, 
                        
                        'power_threshold':-90, 'medfilt_time':0.01, 
-                       'smooth_time':0.1, 'join_gap':1.0, 'min_density':0.8, 
+                       'smooth_time':0.01, 'join_gap':1.0, 'min_density':0.8, 
                        'min_dense_time':0.5
                        }
         
@@ -475,8 +475,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         """Load a pickled song with its classification and make it active"""
         self.logger.debug('Clicked the deserialize song button')
         
-        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Select pickled song', 
-                '', 'PICKLE files (*.pkl)')
+        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Select serialized song', 
+                '', 'PKL files (*.pkl)')
         
         self.deserialize_song_async(file_name)
     
@@ -495,7 +495,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the serialize active song button')
         
         destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
-                    'Choose location for pickled song'))
+                    'Choose location for serialized song'))
         
         self.serialize_song_async(destination)
     

@@ -26,7 +26,10 @@ from scipy import signal
 import scipy.io.wavfile
 import numpy as np
 
-import json
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
@@ -665,21 +668,21 @@ class SongFile(object):
         
     def serialize(self, destination, filename=None):
         if filename is None:
-            filename = str(self) + '.json'
-        elif os.path.splitext(filename)[1] is not '.json':
-            filename = filename + '.json'
+            filename = str(self) + '.pkl'
+        elif os.path.splitext(filename)[1] is not '.pkl':
+            filename = filename + '.pkl'
         
         fullpath = os.path.join(destination, filename)
         self.logger.info('Serailizing to %s', fullpath)
-        with open(fullpath, 'wb') as picklefile:
-            json.dump(self, picklefile)
+        with open(fullpath, 'w') as outputfile:
+            pickle.dump(self, outputfile)
             
         self.logger.info('Done serializing!')
         
     @classmethod
     def deserialize(cls, filename):
-        with open(filename, 'rb') as picklefile:
-            sf = json.load(picklefile)
+        with open(filename, 'r') as inputfile:
+            sf = pickle.load(inputfile)
             
         try:
             assert isinstance(sf, cls)
