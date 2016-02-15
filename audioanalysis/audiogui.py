@@ -1495,9 +1495,13 @@ class OutLog:
                             QtGui.QTextCursor.StartOfLine,
                             mode=QtGui.QTextCursor.KeepAnchor
                             )
+                    self.flag = True
                 
                 while char != '\n' and self.cache:
                     char = self.cache.pop()
+                
+                if char == '\n':
+                    self.cache.append('\n')
                 
             else:
                 self.cache.append(char)
