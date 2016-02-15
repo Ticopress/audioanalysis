@@ -328,6 +328,9 @@
       <property name="frameShadow">
        <enum>QFrame::Plain</enum>
       </property>
+      <property name="lineWrapMode">
+       <enum>QTextEdit::NoWrap</enum>
+      </property>
       <property name="readOnly">
        <bool>true</bool>
       </property>
@@ -360,7 +363,7 @@
      <addaction name="separator"/>
      <addaction name="action_load_nn"/>
      <addaction name="separator"/>
-     <addaction name="action_unpickle_song"/>
+     <addaction name="action_deserialize_song"/>
     </widget>
     <widget class="QMenu" name="menuLoad">
      <property name="title">
@@ -371,7 +374,7 @@
      <addaction name="separator"/>
      <addaction name="action_save_nn"/>
      <addaction name="separator"/>
-     <addaction name="action_pickle_active_song"/>
+     <addaction name="action_serialize_active_song"/>
     </widget>
     <widget class="QMenu" name="menuNew">
      <property name="title">
@@ -498,14 +501,14 @@
     <string>Current Song</string>
    </property>
   </action>
-  <action name="action_pickle_active_song">
+  <action name="action_serialize_active_song">
    <property name="text">
-    <string>Pickle Active Song</string>
+    <string>Serailize Active Song</string>
    </property>
   </action>
-  <action name="action_unpickle_song">
+  <action name="action_deserialize_song">
    <property name="text">
-    <string>Unpickle Song</string>
+    <string>Deserialize Song</string>
    </property>
   </action>
  </widget>

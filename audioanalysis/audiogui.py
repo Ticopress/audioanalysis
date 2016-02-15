@@ -40,7 +40,10 @@ import collections
 from freqanalysis import AudioAnalyzer, SongFile
 from threadsafety import BGThread, SignalStream
 
-Ui_MainWindow, QMainWindow = loadUiType('main.ui')
+
+#Determine if the program is executing in a bundle or not
+
+Ui_MainWindow, QMainWindow = loadUiType('./main.ui')
 
 #decorator for asynchronous class functions
 def async_gui_call(fn):
@@ -73,15 +76,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.setupUi(self)
                         
         #Initialize text output to GUI
-        self.printerbox = OutLog(self.console)
+        self.printerbox = OutLog(self.console, interval_ms=250)
         self.printstream = SignalStream(interval_ms=100)
         sys.stdout = self.printstream
         self.printstream.write_signal.connect(self.print_to_gui)
         
-        logdir = '/Users/new/Documents/Jarvis Lab/jarvis-lab-audio-analysis/data/logs'
+        logdir = os.path.join(os.path.dirname(__file__), 'logs')
         logfile = datetime.datetime.now().strftime("%Y-%m-%d") + '.txt'     
         file_handler = logging.FileHandler(filename=os.path.join(logdir, logfile))
-        file_format = logging.Formatter(fmt='%(levelname)s: %(asctime)s from %(name)s in %(funcName)s: %(message)s')
+        
+        file_format = logging.Formatter(fmt='%(levelname)s: %(asctime)s from '
+                '%(name)s in %(funcName)s: %(message)s')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(file_format)
         self.logger.addHandler(file_handler)
@@ -94,7 +99,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         self.logger.setLevel(logging.DEBUG)
         
-        self.logger.debug('Start of program execution {0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        self.logger.debug('Start of program execution '
+                '{0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         
         #Set thread priority for the GUI thread to be non-laggy
         QtCore.QThread.currentThread().setPriority(QtCore.QThread.HighPriority)
@@ -145,10 +151,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.action_find_current_motifs.triggered:
                     lambda *args: self.find_motifs_callback('current'),
             
-            self.action_pickle_active_song.triggered:
-                    lambda *args: self.pickle_song_callback(),
-            self.action_unpickle_song.triggered:
-                    lambda *args: self.unpickle_song_callback(),
+            self.action_serialize_active_song.triggered:
+                    lambda *args: self.serialize_song_callback(),
+            self.action_deserialize_song.triggered:
+                    lambda *args: self.deserialize_song_callback(),
             
             self.song_table.cellDoubleClicked:
                     lambda r, c, *args: self.table_clicked_callback('songs', r),
@@ -158,18 +164,24 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         #Enumerate functions to be called when each async call is terminated
         self.async_cleanup_calls = {
-                'load_files_async': [lambda: self.update_table_callback('songs')],
-                'text_thread_test':[lambda: self.print_to_gui('closing test 1'), lambda: self.print_to_gui('closing test 2')],
-                'table_clicked_async':[lambda: self.show_active_song_callback()],
-                'load_neural_net_async': [],
-                'create_new_neural_net_async': [],
-                'save_neural_net_async':[],
-                'unpickle_song_async':[lambda: self.update_table_callback('songs'), lambda: self.show_active_song_callback()],
-                'pickle_song_async':[],
-                'save_motifs_async':[],
-                'auto_classify_async':[lambda: self.show_active_song_callback()],
-                'find_motifs_async':[lambda: self.update_table_callback('motifs')]
-                }
+            'load_files_async': [lambda: self.update_table_callback('songs')],
+            'text_thread_test':[
+                    lambda: self.print_to_gui('closing test 1'), 
+                    lambda: self.print_to_gui('closing test 2')
+                    ],
+            'table_clicked_async':[lambda: self.show_active_song_callback()],
+            'load_neural_net_async': [],
+            'create_new_neural_net_async': [],
+            'save_neural_net_async':[],
+            'deserialize_song_async':[
+                    lambda: self.update_table_callback('songs'), 
+                    lambda: self.show_active_song_callback()
+                    ],
+            'serialize_song_async':[],
+            'save_motifs_async':[],
+            'auto_classify_async':[lambda: self.show_active_song_callback()],
+            'find_motifs_async':[lambda: self.update_table_callback('motifs')]
+            }
         
         self.connect_signals(init=True)
         self.threads = []
@@ -197,11 +209,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
                        'freq_downsample_disp':1,  'split':600, 'vmin':-80, 
                        'vmax':-40, 'nfft':512, 'fft_time_window_ms':10, 
-                       'fft_time_step_ms':2, 'process_chunk_s':30, 
+                       'fft_time_step_ms':2, 'process_chunk_s':60, 
                        
                        'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_freq':440.0, 'epochs':3, 'batch_size':100, 
+                       'min_freq':440.0, 'epochs':30, 'batch_size':500, 
                        'validation_split':0.05, 'img_cols':1, 'img_rows':128, 
                        
                        'power_threshold':-90, 'medfilt_time':0.01, 
@@ -459,37 +471,37 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.info('Neural net saved!')
             
     @QtCore.pyqtSlot()
-    def unpickle_song_callback(self):
+    def deserialize_song_callback(self):
         """Load a pickled song with its classification and make it active"""
-        self.logger.debug('Clicked the unpickle song button')
+        self.logger.debug('Clicked the deserialize song button')
         
         file_name = QtGui.QFileDialog.getOpenFileName(self, 'Select pickled song', 
                 '', 'PICKLE files (*.pkl)')
         
-        self.unpickle_song_async(file_name)
+        self.deserialize_song_async(file_name)
     
     @async_gui_call
-    def unpickle_song_async(self, file_name):
+    def deserialize_song_async(self, file_name):
         if file_name:
-            sf = SongFile.unpickle(file_name)
+            sf = SongFile.deserialize(file_name)
             self.analyzer.songs.append(sf)
             self.analyzer.set_active(sf)
         else:
             self.logger.debug('Cancelled file select')
     
     @QtCore.pyqtSlot()
-    def pickle_song_callback(self):
-        """Save the active song as a pickle file, preserving classification"""
-        self.logger.debug('Clicked the pickle active song button')
+    def serialize_song_callback(self):
+        """Save the active song as a serialize file, preserving classification"""
+        self.logger.debug('Clicked the serialize active song button')
         
         destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
                     'Choose location for pickled song'))
         
-        self.pickle_song_async(destination)
+        self.serialize_song_async(destination)
     
     @async_gui_call
-    def pickle_song_async(self, destination):
-        self.analyzer.active_song.pickle(destination=destination)
+    def serialize_song_async(self, destination):
+        self.analyzer.active_song.serialize(destination=destination)
 
     @QtCore.pyqtSlot(str)
     def save_motifs_callback(self, mode):
@@ -669,11 +681,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         except AttributeError:
             self.logger.error('No neural net yet trained, cannot classify songs')
         else:
-            self.logger.info('Took {:2.3f} seconds to classify {1} songs'.format(time.time()-start, count))
+            self.logger.info('Took {0:2.3f} seconds to classify {1} songs'.format(time.time()-start, count))
     
     @QtCore.pyqtSlot(str)
     def find_motifs_callback(self, mode):
-        self.find_motifs_callback(mode)
+        self.find_motifs_async(mode)
     
     @async_gui_call
     def find_motifs_async(self, mode):
@@ -691,7 +703,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             #self.update_table_callback('motifs')
             count += 1
             
-        self.logger.info('Took {:2.3f} seconds to find motifs in {1}'.format(time.time()-start, count))
+        self.logger.info('Took {0:2.3f} seconds to find motifs in {1} SongFile(s)'.format(time.time()-start, count))
        
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
@@ -1123,8 +1135,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             (None, None, None, None),
             ('Select', 'Cursor with click, select with drag', 'select1', 'select'),
         )
-                
+   
         self.icons_dir = os.path.join(os.path.dirname(__file__), 'icons')
+            
         self.logger.debug('Icons directory %s', self.icons_dir)
 
         for a in self.findChildren(QtGui.QAction):
@@ -1467,21 +1480,22 @@ class OutLog:
         self.timer.timeout.connect(self.flush)
         self.thread.started.connect(self.timer.start)
         self.thread.start()
+        
+    def __del__(self):
+        self.thread.quit()
+        self.thread.wait()
 
     def write(self, m):
         locker = QtCore.QMutexLocker(self.mutex)
 
         for char in str(m):
-            if char == '\b':
-                if self.cache:
-                    delchar = self.cache.pop() #efficient?
-                    if delchar == '\n':
-                        self.cache.append(delchar)
-                else:
-                    self.edit.moveCursor(
-                            QtGui.QTextCursor.Left, mode=QtGui.QTextCursor.KeepAnchor)
-                    self.flag = True
-            elif char != '\r':
+            if char == '\r':
+                self.edit.moveCursor(
+                        QtGui.QTextCursor.StartOfLine,
+                        mode=QtGui.QTextCursor.KeepAnchor
+                        )
+                self.flag = True
+            else:
                 self.cache.append(char)
             
     @QtCore.pyqtSlot()
@@ -1497,6 +1511,8 @@ class OutLog:
             self.edit.insertPlainText(''.join(self.cache))
             self.cache = []
             self.edit.moveCursor(QtGui.QTextCursor.End)
+            
+    
 
           
 def main():  
