@@ -28,7 +28,7 @@ import numpy as np
 
 try:
     import cPickle as pickle
-except:
+except ImportError:
     import pickle
 
 import keras.layers.core as corelayers
@@ -41,7 +41,7 @@ class AudioAnalyzer():
     """AudioAnalyzer docstring goes here TODO
     
     """
-    logger = logging.getLogger('AudioAnalyzer.logger')
+    logger = logging.getLogger('JLAA.AudioAnalyzer')
     
     def __init__(self, **params):
         """Create an AudioAnalyzer
@@ -294,11 +294,11 @@ class AudioAnalyzer():
         
         try:
             min_freq = self.params['min_freq']
-            self.logger.info('Highpass filter %g Hz applied', min_freq)
+            self.logger.debug('Highpass filter %g Hz applied', min_freq)
             data = AudioAnalyzer.butter_highpass_filter(sf.data, min_freq, sf.Fs, 5)
         except KeyError:
             data = sf.data
-            self.logger.info('No highpass filter applied')
+            self.logger.debug('No highpass filter applied')
         
         if nfft < nperseg:
             nfft = 2**np.ceil(np.log2(nperseg))
@@ -346,12 +346,19 @@ class AudioAnalyzer():
         else:
             self.logger.debug('Size of classes: {0}; size of time: {1}'.format(sf.time.size, sf.classification.size))
             if sf.classification.size >= sf.time.size:
-                #trim classification to size
+                #linear interpolation to size (nearest neighbor)
+                #indices = np.linspace(0, sf.classification.size-1, sf.time.size)
+                #sf.classification = scipy.interpolate.interp1d(indices, sf.classification, kind='nearest', fill_value=0)
                 sf.classification = sf.classification[0:sf.time.size]
-            else:
-                #pad to match size - difference will be small enough to not matter
-                dif = sf.time.size - sf.classification.size
-                sf.classification = np.pad(sf.classification, (0, dif), mode='constant')
+            elif sf.classification.size < sf.time.size:
+                difference = sf.time.size - sf.classification.size
+                if difference%2 == 0:
+                    left = difference/2
+                    right = difference/2
+                else:
+                    left = difference/2 + 1
+                    right = difference/2
+                sf.classification = np.pad(sf.classification, (left, right), 'constant')
         
         return Sxx[0:nfft/2, :]
     
@@ -383,11 +390,14 @@ class AudioAnalyzer():
         """Creates a classification for the active song using classifier
         
         """
+        self.logger.info('Classifying {0}'.format(str(self.active_song)))
+        
+        batch_size = self.params.get('batch_size', 100)
         
         indices = np.arange(self.active_song.time.size)
         input = self.get_data_sample(indices)
                 
-        prbs = self.classifier.predict_proba(input, batch_size=100, verbose=1).T
+        prbs = self.classifier.predict_proba(input, batch_size=batch_size, verbose=1).T
         #for i in range(prbs.shape[1]):
         #    print self.active_song.time[i], ':', prbs[:, i]
          
@@ -402,9 +412,9 @@ class AudioAnalyzer():
         except KeyError:
             thresholded_classes = unfiltered_classes
         else:
-            self.logger.info('Thresholding at {0} dB'.format(power_threshold))
+            self.logger.debug('Thresholding at {0} dB'.format(power_threshold))
             below_threshold = np.flatnonzero(10*np.log10(self.active_song.power) < power_threshold)
-            self.logger.info('{0} indices found with low power'.format(below_threshold.size))
+            self.logger.debug('{0} indices found with low power'.format(below_threshold.size))
             thresholded_classes = unfiltered_classes
             thresholded_classes[below_threshold] = 0
         
@@ -450,7 +460,7 @@ class SongFile(object):
     determined by the AudioAnalyzer class.
 
     Instead, this stores the basic song data: Fs, analog signal data"""
-    logger = logging.getLogger('SongFile.logger')
+    logger = logging.getLogger('JLAA.SongFile')
     
     def __init__(self, data, Fs, name='', start=0):
         """Create a SongFile for storing signal data
@@ -612,6 +622,7 @@ class SongFile(object):
         
         motifs = []
         for r in reversed(final_regions):
+            r = (r[0]-1.0, r[1]+1.0)
             left, right = self.time_to_idx(r[0]), self.time_to_idx(r[1])
             
             data = self.data[left:right]
@@ -626,9 +637,13 @@ class SongFile(object):
             
             motifs.append(sf)
 
+        self.logger.info('Found {0} motifs in SongFile {1}'.format(len(motifs), str(self)))
         return motifs
     
     def time_to_idx(self, t):
+        if t < 0:
+            return 0
+        
         return int(t * self.Fs)        
     
     def __str__(self):
@@ -651,28 +666,28 @@ class SongFile(object):
         
         scipy.io.wavfile.write(fullpath, int(self.Fs), self.data)
         
-    def pickle(self, destination, filename=None):
+    def serialize(self, destination, filename=None):
         if filename is None:
             filename = str(self) + '.pkl'
         elif os.path.splitext(filename)[1] is not '.pkl':
             filename = filename + '.pkl'
         
         fullpath = os.path.join(destination, filename)
-        self.logger.info('Pickling to %s', fullpath)
-        with open(fullpath, 'wb') as picklefile:
-            pickle.dump(self, picklefile)
+        self.logger.info('Serailizing to %s', fullpath)
+        with open(fullpath, 'w') as outputfile:
+            pickle.dump(self, outputfile)
             
-        self.logger.info('Done pickling!')
+        self.logger.info('Done serializing!')
         
     @classmethod
-    def unpickle(cls, filename):
-        with open(filename, 'rb') as picklefile:
-            sf = pickle.load(picklefile)
+    def deserialize(cls, filename):
+        with open(filename, 'r') as inputfile:
+            sf = pickle.load(inputfile)
             
         try:
             assert isinstance(sf, cls)
         except AssertionError:
-            logging.getLogger('SongFile.Unpickler').error('Cannot unpickle the '
+            cls.logger.error('Cannot deserialize the '
             'file %s, not a valid instance of SongFile', filename)
         else:
             return sf
