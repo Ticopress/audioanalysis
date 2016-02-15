@@ -10,25 +10,20 @@ Website: http://jarvislab.net/
 Current State
 -------------
 
-The software is in the initial stages of development.
+The software is in the alpha stage of development.
 
-- I have selected a GUI framework for the project - it will use PyQt4, until further notice.
-- I have designed the first GUI using Qt Designer.
-- I have figured out how to plot spectrograms in the main window efficiently
-- I have separated Model and View functions into several classes
-- I have linked some of the UI controls to their functions and tested those functions
-- I have subclassed the NavigationToolbar2 and customized several navigation functions to make them convenient for spectrogram navigation
-- I have implemented Model subclasses for storing song data
-- I have implemented efficient chunking of large datasets and efficient data display
-- I have implemented all menu callbacks in the final GUI, including import and export of motifs and trained neural nets
+- A nearly complete, multithreaded GUI is implemented using PyQt4
+- A model for storing and processing audio data is implemented
+- Classification of audio using Keras neural nets is implemented, including training
+- Manual classification of audio for training or testing
+- Automated clipping of classified song bouts
 
 Short-Term Goals
 ----------------
 
-- Implement training of the neural net from a single manually classified songfile
-- Figure out how to build the application with all dependencies in a way that actually will run and not yield annoying ImportErrors
-- Implement classification of a group of songfiles with a trained neural net
-- Extra cleanup/feature-adds: right-click delete songfiles or motifs from the list, a 'deactivate/clear' function in SpectrogramCanvas, ability to manually split motifs, more intelligent motif splitting/detection, control over parameters (especially filtering and vmin/vmax), multithreaded time-consuming processes to free up the GUI thread for updates
+- Build and deliver the alpha version of the software for trial use
+- Clean up text output during training and classification with Keras
+- Expose parameters for configuration in some sort of modal pop-up
 
 Copyright and License
 ---------------------
