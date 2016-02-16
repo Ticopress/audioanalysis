@@ -42,8 +42,8 @@ from threadsafety import BGThread, SignalStream
 
 
 #Determine if the program is executing in a bundle or not
-
-Ui_MainWindow, QMainWindow = loadUiType('./main.ui')
+uifile = os.path.join(os.path.dirname(__file__), 'main.ui')
+Ui_MainWindow, QMainWindow = loadUiType(uifile)
 
 #decorator for asynchronous class functions
 def async_gui_call(fn):
@@ -82,6 +82,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.printstream.write_signal.connect(self.print_to_gui)
         
         logdir = os.path.join(os.path.dirname(__file__), 'logs')
+        if not os.path.exists(logdir):
+            os.makedirs(logdir)
         logfile = datetime.datetime.now().strftime("%Y-%m-%d") + '.txt'     
         file_handler = logging.FileHandler(filename=os.path.join(logdir, logfile))
         
