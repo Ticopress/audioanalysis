@@ -40,9 +40,11 @@ import collections
 from freqanalysis import AudioAnalyzer, SongFile
 from threadsafety import BGThread, SignalStream
 
-
 #Determine if the program is executing in a bundle or not
-uifile = os.path.join(os.path.dirname(__file__), 'main.ui')
+frozen = getattr(sys, 'frozen', False)
+sysdir = sys._MEIPASS if frozen else os.path.dirname(__file__)
+
+uifile = os.path.join(sysdir, 'main.ui')
 Ui_MainWindow, QMainWindow = loadUiType(uifile)
 
 #decorator for asynchronous class functions
@@ -81,7 +83,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         sys.stdout = self.printstream
         self.printstream.write_signal.connect(self.print_to_gui)
         
-        logdir = os.path.join(os.path.dirname(__file__), 'logs')
+        logdir = os.path.join(sysdir, 'logs')
         if not os.path.exists(logdir):
             os.makedirs(logdir)
         logfile = datetime.datetime.now().strftime("%Y-%m-%d") + '.txt'     
@@ -89,7 +91,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         file_format = logging.Formatter(fmt='%(levelname)s: %(asctime)s from '
                 '%(name)s in %(funcName)s: %(message)s')
-        file_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(file_format)
         self.logger.addHandler(file_handler)
         
@@ -226,6 +228,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.analyzer = AudioAnalyzer(**self.params)
         
         self.player = pyaudio.PyAudio()
+        
+        self.play_button.setIcon(QtGui.QIcon(os.path.join(sysdir, 'icons/play.png')))
         
         self.canvas.draw_idle()
         self.show()
@@ -1138,7 +1142,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             ('Select', 'Cursor with click, select with drag', 'select1', 'select'),
         )
    
-        self.icons_dir = os.path.join(os.path.dirname(__file__), 'icons')
+        self.icons_dir = os.path.join(sysdir, 'icons')
             
         self.logger.debug('Icons directory %s', self.icons_dir)
 
@@ -1521,9 +1525,6 @@ class OutLog:
             self.edit.insertPlainText(''.join(self.cache))
             self.cache = []
             self.edit.moveCursor(QtGui.QTextCursor.End)
-            
-    
-
           
 def main():  
     app = QtGui.QApplication(sys.argv)

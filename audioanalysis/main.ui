@@ -234,10 +234,6 @@
               <property name="text">
                <string>Play</string>
               </property>
-              <property name="icon">
-               <iconset>
-                <normaloff>icons/play.png</normaloff>icons/play.png</iconset>
-              </property>
               <property name="iconSize">
                <size>
                 <width>24</width>
