@@ -18,12 +18,11 @@ Audio Analysis. If not, see http://www.gnu.org/licenses/.
 
 To build this module using pyinstaller, use something like:
 
-pyinstaller --onefile --windowed --distpath=./executables/mac_osx 
-    --name=audioanalysis --paths=./audioanalysis audioanalysis/__main__.py
-        
+pyinstaller --onefile --windowed --name=audioanalysis_{version} --paths=./audioanalysis audioanalysis/__main__.py
+       
 Called from the project folder (same level as setup.py)
-    
---distpath puts the executable somewhere that is NOT /dist
+
+
 --paths makes sure to include all modules inside audioanalysis, like the critical
     ones, which does not happen by default
 --name makes sure the output name isn't __main__
@@ -62,7 +61,7 @@ setup(name='audioanalysis',
       license='GPLv3',
       packages=['audioanalysis'],
       install_requires=reqs,
-      long_description=read('README.txt'),
+      long_description=read('README.md'),
       entry_points = {
         'console_scripts': ['audioanalsys=audioanalysis.__main__:run_as_executable'],
       },

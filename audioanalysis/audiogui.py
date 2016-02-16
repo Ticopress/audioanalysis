@@ -19,6 +19,7 @@ FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
 '''
+
 import sys, os, time, fnmatch
 
 from matplotlib.figure import Figure
@@ -28,15 +29,34 @@ from matplotlib.backends.backend_qt4agg import (
 from matplotlib.backend_bases import cursors
 
 from PyQt4 import QtGui, QtCore
-from PyQt4.QtCore import pyqtSignal
 from PyQt4.uic import loadUiType
 
 import numpy as np
 import logging, pyaudio
 
-from freqanalysis import AudioAnalyzer, SongFile
+import datetime
+import collections
 
-Ui_MainWindow, QMainWindow = loadUiType('main.ui')
+from freqanalysis import AudioAnalyzer, SongFile
+from threadsafety import BGThread, SignalStream
+
+
+#Determine if the program is executing in a bundle or not
+
+Ui_MainWindow, QMainWindow = loadUiType('./main.ui')
+
+#decorator for asynchronous class functions
+def async_gui_call(fn):
+    def new_fn(self, *calling_args, **calling_kwargs):
+        self.set_signals_busy()
+        thread_fun = lambda: fn(self, *calling_args, **calling_kwargs)
+        fnname = fn.func_name
+        t = BGThread(thread_fun, name=fnname)
+        t.finished.connect(lambda *a: self.async_call_cleanup(fnname))
+        self.threads.append(t)
+        t.start()
+    
+    return new_fn
 
 class AudioGUI(Ui_MainWindow, QMainWindow):
     """The GUI for automatically identifying motifs
@@ -44,106 +64,240 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     
     """
     
-
+    logger = logging.getLogger('JLAA')
+        
     def __init__(self):
         """Create a new AudioGUI
         
         
         """
         #Initialization of GUI from Qt Designer
-        app = QtGui.QApplication(sys.argv)
         super(AudioGUI, self).__init__()
         self.setupUi(self)
-        
-        self.raise_()
-        self.activateWindow()
-        #Initialize logging
-        self.logger = logging.getLogger('AudioGUI.logger')
-        
+                        
         #Initialize text output to GUI
-        #sys.stdout = OutLog(self.console, sys.stdout)
-        #sys.stderr = OutLog(self.console, sys.stderr, QtGui.QColor(255,0,0) )
+        self.printerbox = OutLog(self.console, interval_ms=250)
+        self.printstream = SignalStream(interval_ms=100)
+        sys.stdout = self.printstream
+        self.printstream.write_signal.connect(self.print_to_gui)
         
-        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+        logdir = os.path.join(os.path.dirname(__file__), 'logs')
+        logfile = datetime.datetime.now().strftime("%Y-%m-%d") + '.txt'     
+        file_handler = logging.FileHandler(filename=os.path.join(logdir, logfile))
+        
+        file_format = logging.Formatter(fmt='%(levelname)s: %(asctime)s from '
+                '%(name)s in %(funcName)s: %(message)s')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(file_format)
+        self.logger.addHandler(file_handler)
+        
+        screen_handler = logging.StreamHandler(stream=self.printstream)
+        screen_format = logging.Formatter(fmt='%(asctime)s - %(message)s')
+        screen_handler.setLevel(logging.INFO)
+        screen_handler.setFormatter(screen_format)
+        self.logger.addHandler(screen_handler)
+        
+        self.logger.setLevel(logging.DEBUG)
+        
+        self.logger.debug('Start of program execution '
+                '{0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        
+        #Set thread priority for the GUI thread to be non-laggy
+        QtCore.QThread.currentThread().setPriority(QtCore.QThread.HighPriority)
         
         # Initialize the basic plot area
         canvas = SpectrogramCanvas(Figure())
-        toolbar = SpectrogramNavBar(canvas, self)
+        SpectrogramNavBar(canvas, self)
 
         self.set_canvas(canvas, self.plot_vl)
         
-        #Set up button callbacks
-        self.play_button.clicked.connect(self.click_play_button)
-        self.entropy_checkbox.stateChanged.connect(
-                lambda: self.plot('entropy'))
-        self.power_checkbox.stateChanged.connect(
-                lambda: self.plot('power'))
-        self.classes_checkbox.stateChanged.connect(
-                lambda: self.plot('classification'))
+        #set up the dictionary of signals to their default slots
+        self.signals = {
+            self.entropy_checkbox.stateChanged:
+                    lambda *args: self.plot('entropy'),
+            self.power_checkbox.stateChanged:
+                    lambda *args: self.plot('power'),
+            self.classes_checkbox.stateChanged:
+                    lambda *args: self.plot('classification'),
+                    
+            self.play_button.clicked:
+                    lambda *args: self.click_play_button_callback(),
+            
+            #Set up menu callbacks
+            self.action_load_files.triggered:
+                    lambda *args: self.select_files_callback(),
+            self.action_load_folder.triggered:
+                    lambda *args: self.select_folder_callback(),
+            self.action_load_nn.triggered:
+                    lambda *args: self.load_neural_net_callback(),
+            
+            self.action_new_nn.triggered:
+                    lambda *args: self.create_new_neural_net_callback(),
+            
+            self.action_save_all_motifs.triggered:
+                    lambda *args: self.save_motifs_callback('all'),
+            self.action_save_current_motif.triggered:
+                    lambda *args: self.save_motifs_callback('current'),
+            self.action_save_nn.triggered:
+                    lambda *args: self.save_neural_net_callback(),
+            
+            self.action_classify_all.triggered:
+                    lambda *args: self.auto_classify_callback('all'),
+            self.action_classify_current.triggered:
+                    lambda *args: self.auto_classify_callback('current'),
+            
+            self.action_find_all_motifs.triggered:
+                    lambda *args: self.find_motifs_callback('all'),
+            self.action_find_current_motifs.triggered:
+                    lambda *args: self.find_motifs_callback('current'),
+            
+            self.action_serialize_active_song.triggered:
+                    lambda *args: self.serialize_song_callback(),
+            self.action_deserialize_song.triggered:
+                    lambda *args: self.deserialize_song_callback(),
+            
+            self.song_table.cellDoubleClicked:
+                    lambda r, c, *args: self.table_clicked_callback('songs', r),
+            self.motif_table.cellDoubleClicked:
+                    lambda r, c, *args: self.table_clicked_callback('motifs', r),
+        }
         
-        #Set up menu callbacks
-        self.action_load_files.triggered.connect(self.select_wav_files)
-        self.action_load_folder.triggered.connect(self.select_wav_folder)
-        self.action_load_nn.triggered.connect(self.load_neural_net)
+        #Enumerate functions to be called when each async call is terminated
+        self.async_cleanup_calls = {
+            'load_files_async': [lambda: self.update_table_callback('songs')],
+            'text_thread_test':[
+                    lambda: self.print_to_gui('closing test 1'), 
+                    lambda: self.print_to_gui('closing test 2')
+                    ],
+            'table_clicked_async':[lambda: self.show_active_song_callback()],
+            'load_neural_net_async': [],
+            'create_new_neural_net_async': [],
+            'save_neural_net_async':[],
+            'deserialize_song_async':[
+                    lambda: self.update_table_callback('songs'), 
+                    lambda: self.show_active_song_callback()
+                    ],
+            'serialize_song_async':[],
+            'save_motifs_async':[],
+            'auto_classify_async':[lambda: self.show_active_song_callback()],
+            'find_motifs_async':[lambda: self.update_table_callback('motifs')]
+            }
         
-        self.action_new_nn.triggered.connect(self.create_new_neural_net)
+        self.connect_signals(init=True)
+        self.threads = []
         
-        self.action_save_all_motifs.triggered.connect(
-                lambda: self.save_motifs('all'))
-        self.action_save_current_motif.triggered.connect(
-                lambda: self.save_motifs('current'))
-        self.action_save_nn.triggered.connect(self.save_neural_net)
-        
-        self.action_classify_all.triggered.connect(
-                lambda: self.auto_classify('all'))
-        self.action_classify_current.triggered.connect(
-                lambda: self.auto_classify('current'))
-        
-        self.action_find_all_motifs.triggered.connect(
-                lambda: self.find_motifs('all'))
-        self.action_find_current_motifs.triggered.connect(
-                lambda: self.find_motifs('current'))
-        
-        
-        self.song_table.cellDoubleClicked.connect(
-                lambda r, c: self.table_clicked('songs', r))
-        self.motif_table.cellDoubleClicked.connect(
-                lambda r, c: self.table_clicked('motifs', r))
-
         #Initialize the collection of assorted parameters
         #Not currently customizable, maybe will make interface later
         defaultlayers = [
                 {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
-                {'type':'Convolution2D', 'args':(16,3,1,)},
+                {'type':'Convolution2D', 'args':(16,3,1,), 'kwargs':{'border_mode':'same'}},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'MaxPooling2D', 'kwargs':{'pool_size':(2,1,)}},
                 {'type':'Dropout', 'args':(0.25,)},
                 {'type':'Flatten'},
-                {'type':'Dense', 'args':(128,)},
+                {'type':'Dense', 'args':(256,)},
+                {'type':'Activation', 'args':('relu',)},
+                {'type':'Dropout', 'args':(0.5,)},
+                {'type':'Dense', 'args':(32,)},
                 {'type':'Activation', 'args':('relu',)},
                 {'type':'Dropout', 'args':(0.5,)},
                 ]
         
+        #So many
+        #spectrogram/display, net/training, classification/discovery
         self.params = {'load_downsampling':1, 'time_downsample_disp':1, 
-                       'freq_downsample_disp':1, 'display_threshold':-400, 
-                       'split':600, 'vmin':-90, 'vmax':-40, 'nfft':512, 
-                       'fft_time_window_ms':10, 'fft_time_step_ms':2, 
-                       'process_chunk_s':15, 'layers':defaultlayers, 
+                       'freq_downsample_disp':1,  'split':600, 'vmin':-80, 
+                       'vmax':-40, 'nfft':512, 'fft_time_window_ms':10, 
+                       'fft_time_step_ms':2, 'process_chunk_s':60, 
+                       
+                       'layers':defaultlayers, 
                        'loss':'categorical_crossentropy', 'optimizer':'adadelta',
-                       'min_dur':1.0, 'max_dur':5.0, 'smooth_gap':0.075,
-                       'min_freq':440.0
+                       'min_freq':440.0, 'epochs':30, 'batch_size':100, 
+                       'validation_split':0.05, 'img_cols':1, 'img_rows':128, 
+                       
+                       'power_threshold':-90, 'medfilt_time':0.01, 
+                       'smooth_time':0.01, 'join_gap':1.0, 'min_density':0.8, 
+                       'min_dense_time':0.5
                        }
-            
+        
         self.analyzer = AudioAnalyzer(**self.params)
+        
         self.player = pyaudio.PyAudio()
         
         self.canvas.draw_idle()
         self.show()
         
         self.logger.info('Finished with initialization')
-        sys.exit(app.exec_())
+        
+    @QtCore.pyqtSlot(str)
+    def print_to_gui(self, text):
+        self.printerbox.write(text)
+        
+    @async_gui_call
+    def text_thread_test(self, strval, intval):
+        print 'Strval: {0} intval: {1}'.format(strval, intval)
+        for _ in range(10):
+            print '{0} - not error text?'.format(time.time())
+            time.sleep(0.1)
+        for _ in range(10):
+            self.logger.info('{0} - info text?'.format(time.time()))
+            time.sleep(0.3)
+        for _ in range(10):
+            self.logger.error('{0} - error text?'.format(time.time()))
+            time.sleep(0.3)
     
+    def async_call_cleanup(self, name):
+        self.logger.debug('Ending async call to {0}'.format(name))
+        
+        for f in self.async_cleanup_calls[name]:
+            f()
+        
+        self.threads = [t for t in self.threads if not t.isFinished()]
+                
+        if not self.threads:
+            self.connect_signals()
+        
+    def connect_signals(self, init=False):
+        '''Connect all GUI control signals to their relevant slots
+        
+        This method has been put in a function because it will be used in a 
+        threaded application
+        
+        Keyword Arguments:
+            init: boolean value indicating that this is the first time calling
+                the function
+        '''
+        
+        self.logger.debug('Connecting signals')
+        for sig, slot in self.signals.items():
+            if not init:
+                sig.disconnect()
+            
+            #slot is a function or lambda
+            #slot takes a known number of arguments (
+            sig.connect(slot)
+    
+    def set_signals_busy(self):
+        '''Disconnect all signals and reroute them to busy_alert
+        
+        This prevents much (but not all) of the GUI interaction the user has
+        in a multithreaded program, but alerts the user to why their control
+        has been removed
+        '''
+        self.logger.debug('Setting signals as busy')
+        for sig in self.signals.keys():
+            sig.disconnect()
+            sig.connect(self.busy_alert)
+    
+    def busy_alert(self):
+        '''Function to call for all GUI signals when something is processing'''
+        
+        self.logger.warning('Cannot execute that function during processing')
+        self.logger.warning('Running processes are: ')
+        for t in self.threads:
+            self.logger.warning('Thread {0} is running {1}'.format(id(t), t.name))
+           
     def set_canvas(self, canvas, loc):
         """Set the SpectrogramCanvas for this GUI
         
@@ -157,24 +311,21 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             loc.addWidget(t)
             
         self.canvas = canvas
-        
-        #Connect any slots coming from canvas here
-        #-----slots-----
     
     @QtCore.pyqtSlot()
-    def select_wav_files(self):
+    def select_files_callback(self):
         """Load one or more wav files as SongFiles"""
         self.logger.debug('Clicked the file select button')
               
         file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Select file(s)', 
                 '', 'WAV files (*.wav)')
         if file_names:
-            self.load_wav_files(file_names)
+            self.load_files_async(file_names)
         else:
             self.logger.debug('Cancelled file select')
     
-    @QtCore.pyqtSlot()           
-    def select_wav_folder(self):
+    @QtCore.pyqtSlot()
+    def select_folder_callback(self):
         """Load all .wav files in a folder and all its subfolders as SongFiles"""
         
         self.logger.debug('Clicked the folder select button')
@@ -183,12 +334,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.info('selected %s', str(folder_name))
         if folder_name:
             files = self.find_files(str(folder_name), '*.wav') + self.find_files(str(folder_name), '*.WAV')
-            self.load_wav_files(files)
+            self.load_files_async(files)
         else:
             self.logger.debug('Cancelled file select')
 
-    @QtCore.pyqtSlot()    
-    def load_wav_files(self, file_names):
+    @async_gui_call
+    def load_files_async(self, file_names):
         """Load a list of wave files as SongFiles"""
         
         for f in file_names:
@@ -203,9 +354,9 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                     len(new_songs))
             
             self.analyzer.songs.extend(new_songs)
-            self.update_table('songs')
-                    
-    def update_table(self, name):
+    
+    @QtCore.pyqtSlot(str)
+    def update_table_callback(self, name):
         """Display information on loaded SongFiles in the table"""
         if name=='songs':
             data = self.analyzer.songs
@@ -231,86 +382,153 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         namecol = QtGui.QTableWidgetItem(sf.name)
 
         m, s = divmod(sf.start, 60)
-        startcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        startcol = QtGui.QTableWidgetItem("{:02d}:{:06.3f}".format(int(m), s))
         
         m, s = divmod(sf.length, 60)
-        lengthcol = QtGui.QTableWidgetItem("%02d:%05.3f" % (m, s))
+        lengthcol = QtGui.QTableWidgetItem("{:02d}:{:06.3f}".format(int(m), s))
         
         return [namecol, startcol, lengthcol]
     
     @QtCore.pyqtSlot(str, int)
-    def table_clicked(self, table, row):
+    def table_clicked_callback(self, table, row):
+        self.table_clicked_async(table, row)
+    
+    @async_gui_call
+    def table_clicked_async(self, table, row):
         if table == 'motifs':
             self.analyzer.set_active(self.analyzer.motifs[row])
         elif table == 'songs':
             self.analyzer.set_active(self.analyzer.songs[row])
         else:
             self.logger.warning('Unknown table %s clicked, cannot display song', table)
-            return
         
-        self.show_active_song()
+        #self.show_active_song_callback()
     
-    @QtCore.pyqtSlot()      
-    def load_neural_net(self):
+    @QtCore.pyqtSlot()
+    def load_neural_net_callback(self):
         """Load a folder containing the files necessary to specify a neural net"""
         self.logger.debug('Clicked the NN load button')
               
         folder = str(QtGui.QFileDialog.getExistingDirectory(parent=self, 
                 caption='Select a folder containing the required NN files'))
         
+        self.load_neural_net_async(folder)
+        
+    @async_gui_call
+    def load_neural_net_async(self, folder):
         if folder:
             try:
-                net = self.analyzer.reconstitute_nn(folder)
+                net = self.analyzer.load_neural_net(folder)
             except (IOError, KeyError):
                 self.logger.error('No valid neural net in that file')
             else:
-                self.analyzer.nn = net
+                self.analyzer.classifier = net
+                shape = self.analyzer.classifier.layers[0].input_shape
+                self.params['img_rows'] = shape[2]
+                self.params['img_cols'] = shape[3]
+                self.analyzer.params['img_rows'] = shape[2]
+                self.analyzer.params['img_cols'] = shape[3]
         else:
             self.logger.debug('Cancelled loading of neural net')
     
-    @QtCore.pyqtSlot()              
-    def create_new_neural_net(self):
+    @QtCore.pyqtSlot()
+    def create_new_neural_net_callback(self):
         """Uses the Analyzer's active_song to construct and train a neural net"""
-        self.analyzer.nn = self.analyzer.build_neural_net(**self.analyzer.params)
+        
+        self.create_new_neural_net_async()
+        
+    @async_gui_call
+    def create_new_neural_net_async(self):
+        start = time.time()
+        self.analyzer.classifier = self.analyzer.build_neural_net()
         
         #then, train it
+        self.analyzer.train_neural_net()
+        
+        self.logger.info('{0} seconds elapsed building and training the '
+                'classifier'.format(time.time()-start))
     
-    @QtCore.pyqtSlot()          
-    def save_neural_net(self):
+    @QtCore.pyqtSlot()
+    def save_neural_net_callback(self):
         """Save the analyzer's current neural net to a file to avoid training"""
         self.logger.debug('Clicked the NN save button')
               
         fullpath = str(QtGui.QFileDialog.getSaveFileName(parent=self, 
                 caption='Enter folder name to save the required NN files'))
         
+        self.save_neural_net_async(fullpath)
+        
+    @async_gui_call  
+    def save_neural_net_async(self, fullpath):
         if fullpath:
             self.logger.info('Saving NN to %s', fullpath)
             if not os.path.exists(fullpath):
                 os.makedirs(fullpath)
-            self.analyzer.export_nn(fullpath)
+            self.analyzer.export_neural_net(fullpath)
         else:
             self.logger.debug('Cancelled save neural net')
+            
+        self.logger.info('Neural net saved!')
+            
+    @QtCore.pyqtSlot()
+    def deserialize_song_callback(self):
+        """Load a pickled song with its classification and make it active"""
+        self.logger.debug('Clicked the deserialize song button')
+        
+        file_name = QtGui.QFileDialog.getOpenFileName(self, 'Select serialized song', 
+                '', 'PKL files (*.pkl)')
+        
+        self.deserialize_song_async(file_name)
+    
+    @async_gui_call
+    def deserialize_song_async(self, file_name):
+        if file_name:
+            sf = SongFile.deserialize(file_name)
+            self.analyzer.songs.append(sf)
+            self.analyzer.set_active(sf)
+        else:
+            self.logger.debug('Cancelled file select')
+    
+    @QtCore.pyqtSlot()
+    def serialize_song_callback(self):
+        """Save the active song as a serialize file, preserving classification"""
+        self.logger.debug('Clicked the serialize active song button')
+        
+        destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
+                    'Choose location for serialized song'))
+        
+        self.serialize_song_async(destination)
+    
+    @async_gui_call
+    def serialize_song_async(self, destination):
+        self.analyzer.active_song.serialize(destination=destination)
 
-    @QtCore.pyqtSlot()              
-    def save_motifs(self, mode):
+    @QtCore.pyqtSlot(str)
+    def save_motifs_callback(self, mode):
         if mode == 'all':
-            folder_name = str(QtGui.QFileDialog.getExistingDirectory(self, 
+            destination = str(QtGui.QFileDialog.getExistingDirectory(self, 
                     'Select folder'))
-            
-            for mf in self.analyzer.motifs:
-                mf.export(destination=folder_name)
-            
+            self.save_motifs_async(mode, destination)
+
         elif mode == 'current':
-            file_name = str(QtGui.QFileDialog.getSaveFileName(self, 
+            destination = str(QtGui.QFileDialog.getSaveFileName(self, 
                     'Choose filename and save location'))
+            self.save_motifs_async(mode, destination)
+
+    @async_gui_call
+    def save_motifs_async(self, mode, destination):
+        if mode == 'all':
+            for mf in self.analyzer.motifs:
+                mf.export(destination = destination)
+                
+        if mode == 'current':
             self.analyzer.active_song.export(
-                    destination=os.path.dirname(file_name), 
-                    filename=os.path.basename(file_name)
+                    destination=os.path.dirname(destination), 
+                    filename=os.path.basename(destination)
                     )
-
-
-    @QtCore.pyqtSlot()            
-    def click_play_button(self):
+    
+    @QtCore.pyqtSlot()
+    def click_play_button_callback(self):
         """Callback for clicking the GUI button"""
         try:
             if self.play_button.isChecked():
@@ -333,12 +551,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 channels=1,
                 rate=int(self.analyzer.active_song.Fs),
                 output=True,
-                stream_callback=self.play_audio_callback,
+                stream_callback=self.play_audio,
                 frames_per_buffer=4096)
         
         self.stream.start_stream()
  
-    
     def stop_playback(self):
         """Stop and close a PyAudio stream
         
@@ -348,7 +565,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.stream.stop_stream()
             self.stream.close()
 
-    def play_audio_callback(self, in_data, frame_count, time_info, status):
+    def play_audio(self, in_data, frame_count, time_info, status):
         """Callback for separate thread that plays audio
         
         This is responsible for moving the marker on the canvas, and since the
@@ -363,7 +580,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
         return (data, pyaudio.paContinue)    
     
-    def show_active_song(self):
+    @QtCore.pyqtSlot()
+    def show_active_song_callback(self):
         """Put all applicable data from the Model to the View
         
         This function assumes all preprocessing has been completed and merely
@@ -383,7 +601,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         select tool, the keypress will assign the value of that number to be
         the classification of the selected region
         """
-                
         if (e.text() in [str(i) for i in range(10)] and 
                 self.canvas.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time, 
@@ -394,7 +611,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             self.plot('classification')
             self.canvas.set_selection(())  
     
-    @QtCore.pyqtSlot(str)             
+    @QtCore.pyqtSlot(str)
     def plot(self, plot_type):
         """Show active song data on the plot
         
@@ -442,21 +659,51 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         else:
             self.logger.warning('Unknown plot type %s, cannot plot', plot_type)
 
-    @QtCore.pyqtSlot(str)    
-    def auto_classify(self, mode):
-        pass
-
-    @QtCore.pyqtSlot(str)    
-    def find_motifs(self, mode):
+    @QtCore.pyqtSlot(str)
+    def auto_classify_callback(self, mode):
+        self.auto_classify_async(mode)
+        
+    @async_gui_call
+    def auto_classify_async(self, mode):
+        
+        start = time.time()
+        count = 0
+        try:
+            if mode == 'all':
+                for sf in self.analyzer.songs:
+                    self.analyzer.set_active(sf)
+                    self.analyzer.classify_active()
+                    count += 1
+                
+            elif mode == 'current':
+                    self.analyzer.classify_active()
+                    count += 1
+        except AttributeError:
+            self.logger.error('No neural net yet trained, cannot classify songs')
+        else:
+            self.logger.info('Took {0:2.3f} seconds to classify {1} songs'.format(time.time()-start, count))
+    
+    @QtCore.pyqtSlot(str)
+    def find_motifs_callback(self, mode):
+        self.find_motifs_async(mode)
+    
+    @async_gui_call
+    def find_motifs_async(self, mode):
+        start = time.time()
+        count = 0
         if mode == 'all':
             for sf in self.analyzer.songs:
-                self.analyzer.motifs += SongFile.find_motifs(sf, **self.params)
-                
-            self.update_table('motifs')
+                self.analyzer.motifs += sf.find_motifs(**self.params)
+                count += 1
+            #self.update_table_callback('motifs')
             
-        if mode == 'current':
-            self.analyzer.motifs += SongFile.find_motifs(self.analyzer.active_song, **self.params)
-            self.update_table('motifs')
+        elif mode == 'current':
+            active_s = self.analyzer.active_song
+            self.analyzer.motifs += active_s.find_motifs(**self.params)
+            #self.update_table_callback('motifs')
+            count += 1
+            
+        self.logger.info('Took {0:2.3f} seconds to find motifs in {1} SongFile(s)'.format(time.time()-start, count))
        
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
@@ -464,7 +711,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         return [os.path.join(directory, fname) 
                 for fname in os.listdir(directory) 
                 if fnmatch.fnmatch(os.path.basename(fname), pattern)]
-        
     
         
 class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
@@ -479,9 +725,9 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
     'navigate' method.  navigate corrects for any navigation not done by the 
     SpectrogramCanvas and then redraws.
     """
+    logger = logging.getLogger('JLAA.SpectogramCanvas')
     
     def __init__(self, figure_):
-        self.logger = logging.getLogger('SpectrogramCanvas.logger')
         
         #So, multiple inheritance is fun
         #This works if it goes QObject, FigureCanvas
@@ -790,8 +1036,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             
         l, = ax.plot(t, classes, 'b-', scalex=False, scaley=False)
         
-        self.set_range('classification', (0, max(classes)+1))
-        
+        self.set_range('classification', (0, np.amax(classes)+1))
+        #self.set_range('classification', (0, 1))
         l.set_visible(show)
 
         self.draw_idle() 
@@ -812,6 +1058,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         l, = ax.plot(t, entropy, 'g-', scalex=False, scaley=False)
            
         self.set_range('entropy', (min(entropy), max(entropy)))
+        #self.set_range('entropy', (0, 1))
 
         l.set_visible(show)
 
@@ -830,7 +1077,8 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         l, = ax.plot(t, power, 'r-', scalex=False, scaley=False)
 
         self.set_range('power', (min(power), max(power)))
-        
+        #self.set_range('power', (0, 1))
+
         l.set_visible(show)
         
         self.draw_idle()        
@@ -857,9 +1105,10 @@ class SpectrogramNavBar(NavigationToolbar2QT):
     """
     
     #List of signals for emitted by this class
-    navigate = pyqtSignal(dict)
-    set_marker = pyqtSignal(float)
-    set_selection = pyqtSignal(tuple)
+    navigate = QtCore.pyqtSignal(dict)
+    set_marker = QtCore.pyqtSignal(float)
+    set_selection = QtCore.pyqtSignal(tuple)
+    logger = logging.getLogger('JLAA.SpectrogramNavBar')
     
     def __init__(self, canvas_, parent_, *args, **kwargs):  
         """Creates a SpectrogramNavigationBar instance
@@ -868,7 +1117,6 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         """ 
         
         #initialize logging
-        self.logger = logging.getLogger('SpectrogramNavBar.logger')
             
         self.toolitems = (
             ('Home', 'Reset original view', 'home', 'home'),
@@ -887,8 +1135,9 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             (None, None, None, None),
             ('Select', 'Cursor with click, select with drag', 'select1', 'select'),
         )
-                
+   
         self.icons_dir = os.path.join(os.path.dirname(__file__), 'icons')
+            
         self.logger.debug('Icons directory %s', self.icons_dir)
 
         for a in self.findChildren(QtGui.QAction):
@@ -1211,42 +1460,74 @@ class SpectrogramNavBar(NavigationToolbar2QT):
 class OutLog:
     '''OutLog pipes output from a stream to a QTextEdit widget
     
-    This class is taken exactly from stackoverflow
-    http://stackoverflow.com/questions/17132994/pyside-and-python-logging/17145093#17145093
     '''
     
     
-    def __init__(self, edit, out=None, color=None):
-        """(edit, out=None, color=None) -> can write stdout, stderr to a
-        QTextEdit.
-        edit = QTextEdit
-        out = alternate stream ( can be the original sys.stdout )
-        color = alternate color (i.e. color stderr a different color)
+    def __init__(self, edit, interval_ms=200):
         """
+
+        """
+        self.mutex = QtCore.QMutex()
+        self.flag = False
+        
         self.edit = edit
-        self.out = None
-        self.color = color
+        self.cache = collections.deque()
+        
+        self.thread = QtCore.QThread()
+        self.timer = QtCore.QTimer()
+        self.timer.moveToThread(self.thread)
+        self.timer.setInterval(interval_ms)
+        self.timer.timeout.connect(self.flush)
+        self.thread.started.connect(self.timer.start)
+        self.thread.start()
+        
+    def __del__(self):
+        self.thread.quit()
+        self.thread.wait()
 
     def write(self, m):
-        if self.color:
-            tc = self.edit.textColor()
-            self.edit.setTextColor(self.color)
+        locker = QtCore.QMutexLocker(self.mutex)
 
-        self.edit.moveCursor(QtGui.QTextCursor.End)
-        self.edit.insertPlainText( m )
-
-        if self.color:
-            self.edit.setTextColor(tc)
-
-        if self.out:
-            self.out.write(m)
+        for char in str(m):
+            if char == '\r':
+                if not self.flag:
+                    self.edit.moveCursor(
+                            QtGui.QTextCursor.StartOfLine,
+                            mode=QtGui.QTextCursor.KeepAnchor
+                            )
+                    self.flag = True
+                
+                while char != '\n' and self.cache:
+                    char = self.cache.pop()
+                
+                if char == '\n':
+                    self.cache.append('\n')
+                
+            else:
+                self.cache.append(char)
             
-    def flush(self):
-        pass
- 
-           
-def main():    
+    @QtCore.pyqtSlot()
+    def flush(self):  
+        locker = QtCore.QMutexLocker(self.mutex)
+        
+        if self.flag:     
+            self.edit.textCursor().removeSelectedText()
+            self.flag = False
+        
+        if self.cache:
+            self.edit.moveCursor(QtGui.QTextCursor.End)      
+            self.edit.insertPlainText(''.join(self.cache))
+            self.cache = []
+            self.edit.moveCursor(QtGui.QTextCursor.End)
+            
+    
+
+          
+def main():  
+    app = QtGui.QApplication(sys.argv)
+      
     main = AudioGUI()
+    sys.exit(app.exec_())
     
 if __name__ == '__main__':
     main()

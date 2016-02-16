@@ -10,29 +10,25 @@ Website: http://jarvislab.net/
 Current State
 -------------
 
-The software is in the initial stages of development.
+The software is in the alpha stage of development.
 
-- I have selected a GUI framework for the project - it will use PyQt4, until further notice.
-- I have designed the first GUI using Qt Designer.
-- I have figured out how to plot spectrograms in the main window efficiently
-- I have separated Model and View functions into several classes
-- I have linked some of the UI controls to their functions and tested those functions
-- I have subclassed the NavigationToolbar2 and customized several navigation functions to make them convenient for spectrogram navigation
-- I have implemented Model subclasses for storing song data
-- I have implemented efficient chunking of large datasets and efficient data display
+- A nearly complete, multithreaded GUI is implemented using PyQt4
+- A model for storing and processing audio data is implemented
+- Classification of audio using Keras neural nets is implemented, including training
+- Manual classification of audio for training or testing
+- Automated clipping of classified song bouts
 
 Short-Term Goals
 ----------------
 
-- Small updates to UI handling for setting classifications before training
-- Implement calculation of entropy and amplitude in backend
-- Structure a neural net using Keras.io and the write utilities I need to send data to it for training
+- Build and deliver the alpha version of the software for trial use
+- Clean up text output during training and classification with Keras
+- Expose parameters for configuration in some sort of modal pop-up
 
 Copyright and License
 ---------------------
 
 For the complete copyright and licensing information see LICENSE
-
 
 ----------------------------------------------
 Copyright 2015 Justin Palpant
