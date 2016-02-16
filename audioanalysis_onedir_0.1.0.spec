@@ -19,8 +19,10 @@ a = Analysis(['audioanalysis/__main__.py'],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,
              cipher=block_cipher)
+             
 pyz = PYZ(a.pure, a.zipped_data,
              cipher=block_cipher)
+             
 exe = EXE(pyz,
           a.scripts,
           exclude_binaries=True,
@@ -36,4 +38,4 @@ coll = COLLECT(exe,
                a.datas,
                strip=False,
                upx=True,
-               name='audioanalysis_0.1.0')
+               name='audioanalysis_0.1.0_dir')
