@@ -32,6 +32,7 @@ try:
 except ImportError:
     import pickle
 
+
 import keras.layers.core as corelayers
 import keras.layers.convolutional as convlayers
 from keras.models import Sequential, model_from_json
