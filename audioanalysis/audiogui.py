@@ -238,10 +238,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         
     @QtCore.pyqtSlot(str)
     def print_to_gui(self, text):
+        '''Routes a message to this instance's textbox
+        
+        This is a slot and is implemented in conjunction with the SignalStream
+        in threadsafety to provide thread safe access to the GUI textbox
+        '''
         self.printerbox.write(text)
         
     @async_gui_call
     def text_thread_test(self, strval, intval):
+        '''A dummy method for testing threadsafe printing to the GUI'''
+        
         print 'Strval: {0} intval: {1}'.format(strval, intval)
         for _ in range(10):
             print '{0} - not error text?'.format(time.time())
@@ -254,6 +261,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             time.sleep(0.3)
     
     def async_call_cleanup(self, name):
+        '''The function used at the end of every wrapped async_gui_call'''
+        
         self.logger.debug('Ending async call to {0}'.format(name))
         
         for f in self.async_cleanup_calls[name]:
@@ -267,8 +276,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def connect_signals(self, init=False):
         '''Connect all GUI control signals to their relevant slots
         
-        This method has been put in a function because it will be used in a 
-        threaded application
+        In the threaded application slots should end with _callback indicating
+        that the slot can interact with the GUI.
         
         Keyword Arguments:
             init: boolean value indicating that this is the first time calling
@@ -280,8 +289,6 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             if not init:
                 sig.disconnect()
             
-            #slot is a function or lambda
-            #slot takes a known number of arguments (
             sig.connect(slot)
     
     def set_signals_busy(self):
@@ -384,6 +391,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 table.setItem(row, col, item)
             
     def create_table_row_items(self, sf):
+        '''Generate the list of QTableWidgets for a given SongFile'''
         
         namecol = QtGui.QTableWidgetItem(sf.name)
 
@@ -397,19 +405,19 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     
     @QtCore.pyqtSlot(str, int)
     def table_clicked_callback(self, table, row):
+        '''GUI callback when a table item is doubleclicked'''
         self.table_clicked_async(table, row)
     
     @async_gui_call
     def table_clicked_async(self, table, row):
+        
         if table == 'motifs':
             self.analyzer.set_active(self.analyzer.motifs[row])
         elif table == 'songs':
             self.analyzer.set_active(self.analyzer.songs[row])
         else:
             self.logger.warning('Unknown table %s clicked, cannot display song', table)
-        
-        #self.show_active_song_callback()
-    
+            
     @QtCore.pyqtSlot()
     def load_neural_net_callback(self):
         """Load a folder containing the files necessary to specify a neural net"""
