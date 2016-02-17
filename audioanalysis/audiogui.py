@@ -42,7 +42,7 @@ from threadsafety import BGThread, SignalStream
 
 #Determine if the program is executing in a bundle or not
 frozen = getattr(sys, 'frozen', False)
-sysdir = sys._MEIPASS if frozen else os.path.dirname(__file__)
+sysdir = sys._MEIPASS if frozen else os.path.dirname(__file__) # @UndefinedVariable
 
 uifile = os.path.join(sysdir, 'main.ui')
 Ui_MainWindow, QMainWindow = loadUiType(uifile)
