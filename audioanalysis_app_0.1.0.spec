@@ -36,5 +36,5 @@ exe = EXE(pyz,
           
 app = BUNDLE(exe,
          name='AudioAnalysis.app',
-         icon=None,
+         icon='./audioanalysis/icons/audio.icns',
          bundle_identifier=None)
