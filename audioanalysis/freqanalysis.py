@@ -7,13 +7,13 @@ Copyright 2015 Justin Palpant
 
 This file is part of the Jarvis Lab Audio Analysis program.
 
-Audio Analysis is free software: you can redistribute it and/or modify it under 
+Audio Analysis is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
 version.
 
-Audio Analysis is distributed in the hope that it will be useful, but WITHOUT 
-ANYWARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS 
+Audio Analysis is distributed in the hope that it will be useful, but WITHOUT
+ANYWARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
@@ -142,7 +142,7 @@ class AudioAnalyzer():
 
     def load_neural_net(self, folder):
         """Load a neural net from files exported with export_neural_net
-        
+
         The given folder should contain a json and an hd5 file
         """
 
@@ -233,8 +233,9 @@ class AudioAnalyzer():
 
         Returns:
             data: data is a 
-                (1,1,img_rows,img_cols) slice from Sxx and classification is the 
-                corresponding integer class from self.active_song.classification
+                (1,1,img_rows,img_cols) slice from Sxx and classification is
+                the corresponding integer class from
+                self.active_song.classification
 
         If idx exceeds the dimensions of the data, throws IndexError
         If there is not a processed, active song, throws TypeError
@@ -314,14 +315,15 @@ class AudioAnalyzer():
         if nfft < nperseg:
             nfft = 2**np.ceil(np.log2(nperseg))
             self.logger.warning('NFFT (%d) cannot be less than the number of '
-                    'samples in each time_list window (%d).  Temporarily increasing '
-                    'nfft to %d, which will require more memory.  To avoid this,'
-                    ' decrease FFT Time Window in the parameters menu.',
+                    'samples in each time_list window (%d).  Temporarily '
+                    'increasing nfft to %d, which will require more memory.  '
+                    'To avoid this, decrease FFT Time Window in the parameters'
+                    ' menu.',
                     nfft, nperseg, 2**np.ceil(np.log2(nperseg)))
 
         for i in range(0, split_count):
-            self.logger.info('Processing songfile from %d seconds to %d seconds',
-                    i * process_chunk, (i + 1) * process_chunk)
+            self.logger.info('Processing songfile from %d seconds to %d '
+                    'seconds', i * process_chunk, (i + 1) * process_chunk)
 
             (freq, time_part, Sxx_part) = signal.spectrogram(
                 data[i * nchunk:(i + 1) * nchunk],
@@ -356,9 +358,6 @@ class AudioAnalyzer():
             self.logger.debug('Size of classes: {0}; size of time: {1}'.format(
                 sf.time.size, sf.classification.size))
             if sf.classification.size >= sf.time.size:
-                # linear interpolation to size (nearest neighbor)
-                #indices = np.linspace(0, sf.classification.size-1, sf.time.size)
-                #sf.classification = scipy.interpolate.interp1d(indices, sf.classification, kind='nearest', fill_value=0)
                 sf.classification = sf.classification[0:sf.time.size]
             elif sf.classification.size < sf.time.size:
                 difference = sf.time.size - sf.classification.size
