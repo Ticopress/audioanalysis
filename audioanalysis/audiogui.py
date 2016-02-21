@@ -23,6 +23,8 @@ import sys
 import os
 import time
 import fnmatch
+import ast
+import pprint
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import (
@@ -106,7 +108,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         screen_handler = logging.StreamHandler(stream=self.printstream)
         screen_format = logging.Formatter(fmt='%(asctime)s - %(message)s')
-        screen_handler.setLevel(logging.INFO)
+        screen_handler.setLevel(logging.DEBUG)
         screen_handler.setFormatter(screen_format)
         self.logger.addHandler(screen_handler)
 
@@ -800,13 +802,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     @async_gui_call
     def save_parameters_async(self, filename):
         if filename is None:
-            filename = 'parameters.json'
-        elif os.path.splitext(filename)[1] != '.json':
-            filename = filename + '.json'
+            filename = 'parameters.txt'
+        elif os.path.splitext(filename)[1] != '.txt':
+            filename = filename + '.txt'
 
-        with open(filename, 'w') as outputfile:
-            json.dump(self.params, outputfile, sort_keys=True,
-                    indent=4, separators=(',', ': '))
+        with open(filename, 'w') as ofile:
+            pprint.pprint(self.params, indent=4, stream=ofile)
 
         self.logger.info('Done saving parameters to {0}'.format(filename))
 
@@ -816,7 +817,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the load parameters button')
 
         file_name = QtGui.QFileDialog.getOpenFileName(self,
-                'Select parameters file', '', 'JSON files (*.json)')
+                'Select parameters file', '', 'TXT files (*.txt)')
 
         if file_name:
             self.load_parameters_async(file_name)
@@ -826,12 +827,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     @async_gui_call
     def load_parameters_async(self, filename):
         with open(filename, 'r') as openfile:
-            # this is dangerous.  I should look into doing this better?
-            params = json.load(openfile)
+            paramstext = openfile.read()
 
-        self.params = params
-        self.analyzer.params = params
-
+        self.logger.debug('Params are {0}'.format(paramstext))
+        self.params = ast.literal_eval(paramstext)
+        self.analyzer.params = self.params
+        self.logger.debug('Parsed as {0}'.format(self.params))
         self.logger.info('Done loading parameters from {0}'.format(filename))
 
     def find_files(self, directory, pattern):
