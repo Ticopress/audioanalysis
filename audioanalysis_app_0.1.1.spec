@@ -1,4 +1,5 @@
 # -*- mode: python -*-
+import os
 
 block_cipher = None
 venv_path = '/Users/new/.virtualenvs/audioanalysis'
@@ -28,20 +29,18 @@ a = Analysis(['audioanalysis/__main__.py'],
              
 pyz = PYZ(a.pure, a.zipped_data,
              cipher=block_cipher)
-             
 exe = EXE(pyz,
           a.scripts,
-          exclude_binaries=True,
-          name='audioanalysis_0.1.0',
+          a.binaries,
+          a.zipfiles,
+          a.datas,
+          name='audioanalysis_0.1.1_app',
           debug=False,
           strip=False,
           upx=True,
-          console=True)
+          console=True )
           
-coll = COLLECT(exe,
-               a.binaries,
-               a.zipfiles,
-               a.datas,
-               strip=False,
-               upx=True,
-               name='audioanalysis_0.1.0_dir')
+app = BUNDLE(exe,
+         name='AudioAnalysis.app',
+         icon='./audioanalysis/icons/audio.icns',
+         bundle_identifier=None)

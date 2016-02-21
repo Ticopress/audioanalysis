@@ -108,7 +108,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         screen_handler = logging.StreamHandler(stream=self.printstream)
         screen_format = logging.Formatter(fmt='%(asctime)s - %(message)s')
-        screen_handler.setLevel(logging.DEBUG)
+        screen_handler.setLevel(logging.INFO)
         screen_handler.setFormatter(screen_format)
         self.logger.addHandler(screen_handler)
 

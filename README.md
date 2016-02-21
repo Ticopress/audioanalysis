@@ -17,12 +17,20 @@ The software is in the alpha stage of development.
 - Classification of audio using Keras neural nets is implemented, including training
 - Manual classification of audio for training or testing
 - Automated clipping of classified song bouts
+- A first alpha version has been released and is being tests
+
+Changelog
+-------------
+0.1.1
+- Added export and import of parameters as text files
+- Added ability to simultaneously serialize all files to disk
+- Improved WAV file loading system so that no files would be loaded with small slices split off of them.  Previously, loading a 300.01 second-long WAV file with a file split of 300 would result
+in a 300 second file and a 0.01 second file.  Now, if the final split is less than one second, the split rule will be broken and that section will be merged into the last SongFile.
+0.1.0
+- Initial alpha release
 
 Short-Term Goals
 ----------------
-
-- Build and deliver the alpha version of the software for trial use
-- Clean up text output during training and classification with Keras
 - Expose parameters for configuration in some sort of modal pop-up
 
 Copyright and License
