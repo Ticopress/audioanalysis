@@ -21,17 +21,19 @@ The software is in the alpha stage of development.
 
 Changelog
 -------------
-0.1.1
+**Version 0.1.1**
 - Added export and import of parameters as text files
 - Added ability to simultaneously serialize all files to disk
 - Improved WAV file loading system so that no files would be loaded with small slices split off of them.  Previously, loading a 300.01 second-long WAV file with a file split of 300 would result
 in a 300 second file and a 0.01 second file.  Now, if the final split is less than one second, the split rule will be broken and that section will be merged into the last SongFile.
-0.1.0
+
+**Version 0.1.0**
 - Initial alpha release
 
 Short-Term Goals
 ----------------
 - Expose parameters for configuration in some sort of modal pop-up
+- Create a list of workable issues on GitHub based on first test case
 
 Copyright and License
 ---------------------
