@@ -534,7 +534,7 @@ class SongFile(object):
         fs = np.float64(rate)
         data = np.float32(data) / np.max(data)
 
-        if data.ndim is not 1:
+        if data.ndim != 1:
             data = data[:, 0]
 
         if downsampling:
@@ -543,25 +543,36 @@ class SongFile(object):
 
         if split:
             nperfile = split * fs
-            split_count = int(np.ceil(data.shape[0] / nperfile))
+            startidx = 0
+            sections = []
+            while startidx < data.shape[0]:
+                next_section = (startidx, startidx + nperfile)
+                startidx += nperfile
+
+                if (data.shape[0] - startidx) / fs < 1.0:
+                    next_section = (next_section[0], data.shape[0])
+                    startidx = data.shape[0]
+
+                sections.append(next_section)
         else:
             nperfile = data.shape[0]
-            split_count = 1
+            sections = [(0, nperfile)]
 
         if nperfile / fs > 600:
             logging.getLogger('SongFile.Loading.logger').warning(
-                'Current song is %d seconds long and is not'
+                'Current song is {0} seconds long and is not'
                 ' split.  This may cause substantial memory use and '
                 'lead to a program crash.  It is recommended to either '
-                'enable splitting or use a shorter file for NN training', nperfile / fs)
+                'enable splitting or use a shorter file for'
+                ' NN training'.format(nperfile / fs))
 
         sfs = []
 
-        for i in range(0, split_count):
-            songdata = data[i * nperfile:(i + 1) * nperfile]
+        for (startidx, endidx) in sections:
+            songdata = data[startidx:endidx]
             fname = os.path.splitext(os.path.basename(filename))[0]
             next_sf = cls(
-                songdata, fs, name=fname, start=int(i * nperfile / fs))
+                songdata, fs, name=fname, start=startidx / fs)
 
             sfs.append(next_sf)
 

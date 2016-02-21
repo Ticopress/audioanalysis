@@ -234,14 +234,17 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         # So many
         # spectrogram/display, net/training, classification/discovery
         self.params = {'load_downsampling': 1, 'time_downsample_disp': 1,
-                       'freq_downsample_disp': 1, 'split': 600, 'vmin': -80,
-                       'vmax': -40, 'nfft': 512, 'fft_time_window_ms': 10,
-                       'fft_time_step_ms': 2, 'process_chunk_s': 60,
+                       'freq_downsample_disp': 1, 'file_split': 600,
+                       'vmin': -80, 'vmax': -40, 'nfft': 512,
+                       'fft_time_window_ms': 10, 'fft_time_step_ms': 2,
+                       'process_chunk_s': 60,
 
                        'layers': defaultlayers,
-                       'loss': 'categorical_crossentropy', 'optimizer': 'adadelta',
-                       'min_freq': 440.0, 'epochs': 30, 'batch_size': 100,
-                       'validation_split': 0.05, 'img_cols': 1, 'img_rows': 128,
+                       'loss': 'categorical_crossentropy',
+                       'optimizer': 'adadelta', 'min_freq': 440.0,
+                       'epochs': 30, 'batch_size': 100,
+                       'validation_split': 0.05, 'img_cols': 1,
+                       'img_rows': 128,
 
                        'power_threshold': -90, 'medfilt_time': 0.01,
                        'smooth_time': 0.01, 'join_gap': 1.0, 'min_density': 0.8,
@@ -384,11 +387,15 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         for f in file_names:
             self.logger.debug('Loading the file %s', str(f))
-
-            new_songs = SongFile.load(
-                str(f),
-                downsampling=self.params['load_downsampling']
-            )
+            try:
+                new_songs = SongFile.load(
+                    str(f),
+                    downsampling=self.params['load_downsampling'],
+                    split=self.params['file_split']
+                )
+            except KeyError:
+                self.logger.error('Cannot load files - parameters file_split'
+                        ' or load_downsampling not present')
 
             self.logger.info('Loaded %s as %d SongFiles', str(f),
                     len(new_songs))
