@@ -687,15 +687,15 @@ class SongFile(object):
     def serialize(self, destination, filename=None):
         if filename is None:
             filename = str(self) + '.pkl'
-        elif os.path.splitext(filename)[1] is not '.pkl':
+        elif os.path.splitext(filename)[1] != '.pkl':
             filename = filename + '.pkl'
 
         fullpath = os.path.join(destination, filename)
-        self.logger.info('Serailizing to %s', fullpath)
+        self.logger.info('Serializing to %s', fullpath)
         with open(fullpath, 'w') as outputfile:
             pickle.dump(self, outputfile)
 
-        self.logger.info('Done serializing!')
+        self.logger.info('Done serializing {0}'.format(str(self)))
 
     @classmethod
     def deserialize(cls, filename):

@@ -39,13 +39,14 @@ import pyaudio
 
 import datetime
 import collections
+import json
 
 from freqanalysis import AudioAnalyzer, SongFile
 from threadsafety import BGThread, SignalStream
 
 # Determine if the program is executing in a bundle or not
 frozen = getattr(sys, 'frozen', False)
-sysdir = sys._MEIPASS if frozen else os.path.dirname( #  @UndefinedVariable
+sysdir = sys._MEIPASS if frozen else os.path.dirname(  # @UndefinedVariable
     __file__)
 
 uifile = os.path.join(sysdir, 'main.ui')
@@ -167,6 +168,13 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             lambda *args: self.serialize_song_callback(),
             self.action_deserialize_song.triggered:
             lambda *args: self.deserialize_song_callback(),
+            self.action_serialize_all_songs.triggered:
+            lambda *args: self.serialize_all_songs_callback(),
+
+            self.action_load_parameters.triggered:
+            lambda *args: self.load_parameters_callback(),
+            self.action_save_parameters.triggered:
+            lambda *args: self.save_parameters_callback(),
 
             self.song_table.cellDoubleClicked:
             lambda r, c, *args: self.table_clicked_callback('songs', r),
@@ -190,9 +198,12 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 lambda: self.show_active_song_callback()
             ],
             'serialize_song_async': [],
+            'serialize_all_songs_async': [],
             'save_motifs_async': [],
             'auto_classify_async': [lambda: self.show_active_song_callback()],
-            'find_motifs_async': [lambda: self.update_table_callback('motifs')]
+            'find_motifs_async': [lambda: self.update_table_callback('motifs')],
+            'save_parameters_async': [],
+            'load_parameters_async': [],
         }
 
         self.connect_signals(init=True)
@@ -526,26 +537,52 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         destination = str(QtGui.QFileDialog.getExistingDirectory(self,
                     'Choose location for serialized song'))
 
-        self.serialize_song_async(destination)
+        if destination:
+            self.serialize_song_async(self.analyzer.active_song, destination)
+        else:
+            self.logger.info('Cancelled song serialization')
 
     @async_gui_call
-    def serialize_song_async(self, destination):
-        self.analyzer.active_song.serialize(destination=destination)
+    def serialize_song_async(self, song, destination):
+        song.serialize(destination=destination)
+
+    @QtCore.pyqtSlot()
+    def serialize_all_songs_callback(self):
+        """Save all active songs in serialized form"""
+        self.logger.debug('Clicked the serialize all songs button')
+
+        destination = str(QtGui.QFileDialog.getExistingDirectory(self,
+                    'Choose location for serialized songs'))
+
+        if destination:
+            self.serialize_all_songs_async(self.analyzer.songs, destination)
+        else:
+            self.logger.info('Cancelled song serialization')
+
+    @async_gui_call
+    def serialize_all_songs_async(self, songs, destination):
+        for sf in songs:
+            sf.serialize(destination)
 
     @QtCore.pyqtSlot(str)
     def save_motifs_callback(self, mode):
         if mode == 'all':
             destination = str(QtGui.QFileDialog.getExistingDirectory(self,
                     'Select folder'))
-            self.save_motifs_async(mode, destination)
 
         elif mode == 'current':
             destination = str(QtGui.QFileDialog.getSaveFileName(self,
                     'Choose filename and save location'))
+
+        if destination:
             self.save_motifs_async(mode, destination)
+        else:
+            self.logger.info('Cancelled save motif operation')
 
     @async_gui_call
     def save_motifs_async(self, mode, destination):
+        self.logger.info('Starting saving motifs')
+
         if mode == 'all':
             for mf in self.analyzer.motifs:
                 mf.export(destination=destination)
@@ -555,6 +592,8 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 destination=os.path.dirname(destination),
                 filename=os.path.basename(destination)
             )
+
+        self.logger.info('Finished saving motifs')
 
     @QtCore.pyqtSlot()
     def click_play_button_callback(self):
@@ -646,12 +685,13 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def plot(self, plot_type):
         """Show active song data on the plot
 
-        This method relies on the state of the GUI checkboxes to know whether or
-        not a type of data should be shown or hidden.
+        This method relies on the state of the GUI checkboxes to know whether
+        or not a type of data should be shown or hidden.
 
         Inputs:
             plot_type: string specifying which set of data to display
         """
+
         try:
             t_step = self.params['time_downsample_disp']
         except KeyError:
@@ -743,6 +783,56 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
 
         self.logger.info('Took {0:2.3f} seconds to find motifs in {1} '
                 'SongFile(s)'.format(time.time() - start, count))
+
+    @QtCore.pyqtSlot()
+    def save_parameters_callback(self):
+        '''Save the parameters dictionary to a json text file'''
+        self.logger.debug('Clicked the save parameters button')
+
+        fullpath = str(QtGui.QFileDialog.getSaveFileName(parent=self,
+                caption='Enter the parameters file name'))
+
+        if fullpath:
+            self.save_parameters_async(fullpath)
+        else:
+            self.logger.info('Cancelled parameter save')
+
+    @async_gui_call
+    def save_parameters_async(self, filename):
+        if filename is None:
+            filename = 'parameters.json'
+        elif os.path.splitext(filename)[1] != '.json':
+            filename = filename + '.json'
+
+        with open(filename, 'w') as outputfile:
+            json.dump(self.params, outputfile, sort_keys=True,
+                    indent=4, separators=(',', ': '))
+
+        self.logger.info('Done saving parameters to {0}'.format(filename))
+
+    @QtCore.pyqtSlot()
+    def load_parameters_callback(self):
+        '''Load the parameters dictionary from a json text file'''
+        self.logger.debug('Clicked the load parameters button')
+
+        file_name = QtGui.QFileDialog.getOpenFileName(self,
+                'Select parameters file', '', 'JSON files (*.json)')
+
+        if file_name:
+            self.load_parameters_async(file_name)
+        else:
+            self.logger.info('Cancelled loading parameters from file')
+
+    @async_gui_call
+    def load_parameters_async(self, filename):
+        with open(filename, 'r') as openfile:
+            # this is dangerous.  I should look into doing this better?
+            params = json.load(openfile)
+
+        self.params = params
+        self.analyzer.params = params
+
+        self.logger.info('Done loading parameters from {0}'.format(filename))
 
     def find_files(self, directory, pattern):
         """Return filenames matching pattern in directory"""
