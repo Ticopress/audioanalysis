@@ -26,6 +26,14 @@ import fnmatch
 import ast
 import pprint
 
+import numpy as np
+import logging
+import pyaudio
+
+import datetime
+import collections
+import json
+
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas,
@@ -35,21 +43,13 @@ from matplotlib.backend_bases import cursors
 from PyQt4 import QtGui, QtCore
 from PyQt4.uic import loadUiType
 
-import numpy as np
-import logging
-import pyaudio
-
-import datetime
-import collections
-import json
-
 from freqanalysis import AudioAnalyzer, SongFile
 from threadsafety import BGThread, SignalStream
 
 # Determine if the program is executing in a bundle or not
 frozen = getattr(sys, 'frozen', False)
 sysdir = sys._MEIPASS if frozen else os.path.dirname(  # @UndefinedVariable
-    __file__)
+        __file__)
 
 uifile = os.path.join(sysdir, 'main.ui')
 Ui_MainWindow, QMainWindow = loadUiType(uifile)

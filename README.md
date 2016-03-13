@@ -10,14 +10,15 @@ Website: http://jarvislab.net/
 Current State
 -------------
 
-The software is in the alpha stage of development.
+The software is in the alpha stage of development.  It is currently undergoing a major
+reorganization in package structure.
 
 - A nearly complete, multithreaded GUI is implemented using PyQt4
 - A model for storing and processing audio data is implemented
 - Classification of audio using Keras neural nets is implemented, including training
 - Manual classification of audio for training or testing
 - Automated clipping of classified song bouts
-- A first alpha version has been released and is being tests
+- A first alpha version has been released and is being tested
 
 Changelog
 -------------
@@ -34,6 +35,7 @@ Short-Term Goals
 ----------------
 - Expose parameters for configuration in some sort of modal pop-up
 - Create a list of workable issues on GitHub based on first test case
+- Come up with a set of interfaces for future development
 
 Copyright and License
 ---------------------
