@@ -15,26 +15,6 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 Audio Analysis. If not, see http://www.gnu.org/licenses/.
-
-To build this module using pyinstaller, use something like:
-
-pyinstaller --onefile --windowed --name=audioanalysis_{version} --paths=./audioanalysis audioanalysis/__main__.py
-       
-Called from the project folder (same level as setup.py)
-
-
---paths makes sure to include all modules inside audioanalysis, like the critical
-    ones, which does not happen by default
---name makes sure the output name isn't __main__
-
-Make a pip installable package by calling 
-    python setup.py bdist_wheel
-For the python module to be called from the path, make sure that entry_points has
-    'console_scripts': ['audioanalysis=audioanalysis.__main__:main']
-For the package to be importable, make sure packages=['audioanalysis'] and that 
-    install_requires=[list of package names, as in PyPI]
-In order to be able to run python -m audioanalysis, all Qt packages must be
-    pre-installed before calling pip install
 '''
 from setuptools import setup
 import os
@@ -48,12 +28,13 @@ install_reqs = parse_requirements('requirements.txt')
 # e.g. ['django==1.5.1', 'mezzanine==1.4.6']
 reqs = [str(ir.req) for ir in install_reqs]
 
+
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 
 setup(name='audioanalysis',
-      version='0.1.0.dev1',
+      version='0.1.0',
       description='Jarvis Lab Audio Analyzer',
       author='Justin Palpant',
       author_email='justin@palpant.us',
@@ -61,8 +42,5 @@ setup(name='audioanalysis',
       license='GPLv3',
       packages=['audioanalysis'],
       install_requires=reqs,
-      long_description=read('README.md'),
-      entry_points = {
-        'console_scripts': ['audioanalsys=audioanalysis.__main__:run_as_executable'],
-      },
+      long_description=read('README.rst'),
       )

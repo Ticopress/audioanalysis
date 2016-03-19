@@ -1,7 +1,9 @@
 What Is It?
 -----------
 
-This project will provide tools for bird song motif discovery and analysis to the Jarvis Lab at Duke University
+This project will provide tools for bird song motif discovery and analysis
+
+It is being developed for the Erich Jarvis Lab at Duke University
 
 Erich Jarvis Lab - Neurobiology of Vocal Communication
 Website: http://jarvislab.net/
@@ -21,7 +23,12 @@ reorganization in package structure.
 - A first alpha version has been released and is being tested
 
 Changelog
--------------
+---------
+**Version 0.2.0**
+- In progress!
+- Major overhaul and refocus
+- GUI packages have been removed and put on hold until version 0.2 is released at least
+
 **Version 0.1.1**
 - Added export and import of parameters as text files
 - Added ability to simultaneously serialize all files to disk
@@ -45,16 +52,16 @@ For the complete copyright and licensing information see LICENSE
 ----------------------------------------------
 Copyright 2015 Justin Palpant
 
-This file is part of the Jarvis Lab Audio Analysis program.
+This file is part of the audioanalysis Python package program.
 
-Audio Analysis is free software: you can redistribute it and/or modify it under the
+audioanalysis is free software: you can redistribute it and/or modify it under the
 terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
 version.
 
-Audio Analysis is distributed in the hope that it will be useful, but WITHOUT ANY
+audioanalysis is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-Audio Analysis. If not, see http://www.gnu.org/licenses/.
+audioanalysis. If not, see http://www.gnu.org/licenses/.
