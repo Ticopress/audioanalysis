@@ -11,7 +11,7 @@ Current State
 -------------
 
 The software is in the alpha stage of development.  It is currently undergoing a major
-reorganization in package structure.
+reorganization in package structure.  Assume that everything written below will be changed shortly.
 
 - A nearly complete, multithreaded GUI is implemented using PyQt4
 - A model for storing and processing audio data is implemented
@@ -21,7 +21,11 @@ reorganization in package structure.
 - A first alpha version has been released and is being tested
 
 Changelog
--------------
+---------
+*Version 0.2.0**
+- In development!
+- Major project refactoring underway
+
 **Version 0.1.1**
 - Added export and import of parameters as text files
 - Added ability to simultaneously serialize all files to disk
@@ -45,16 +49,16 @@ For the complete copyright and licensing information see LICENSE
 ----------------------------------------------
 Copyright 2015 Justin Palpant
 
-This file is part of the Jarvis Lab Audio Analysis program.
+This file is part of the audioanalysis Python package.
 
-Audio Analysis is free software: you can redistribute it and/or modify it under the
+audioanalysis is free software: you can redistribute it and/or modify it under the
 terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
 version.
 
-Audio Analysis is distributed in the hope that it will be useful, but WITHOUT ANY
+audioanalysis is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-Audio Analysis. If not, see http://www.gnu.org/licenses/.
+audioanalysis. If not, see http://www.gnu.org/licenses/.

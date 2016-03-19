@@ -1,0 +1,16 @@
+sudo: false
+
+language: python
+python: "2.7"
+
+before_script:
+  - pip install pytest-cov
+  - mkdir $HOME/htmlcov
+  - echo "this is a sample artifact" > $HOME/htmlcov/test_artifact.txt
+
+script: ./run_tests.sh
+  
+addons:
+  artifacts: true
+    paths:
+      - $HOME/htmlcov
