@@ -1,3 +1,4 @@
+##It begins
 sudo: false
 
 language: python
@@ -11,6 +12,7 @@ before_script:
 script: ./run_tests.sh
   
 addons:
-  artifacts: true
+  artifacts:
+    # ...
     paths:
-      - $HOME/htmlcov
+    - $HOME/htmlcov
