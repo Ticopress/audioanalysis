@@ -4,8 +4,14 @@ What Is It?
 This project will provide tools for bird song motif discovery and analysis to the Jarvis Lab at Duke University
 
 Erich Jarvis Lab - Neurobiology of Vocal Communication
-Website: http://jarvislab.net/
+Website: `<http://jarvislab.net/>`_
 
+Most recent TravisCI build status of master branch: |buildstatus|
+
+.. |buildstatus| image:: https://travis-ci.org/jpalpant/audioanalysis.svg?branch=master
+    :target: https://travis-ci.org/jpalpant/audioanalysis
+    
+See documentation (under construction) at `Read the Docs <https://audioanalysis.readthedocs.org>`_
 
 Current State
 -------------
