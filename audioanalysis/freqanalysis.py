@@ -40,7 +40,7 @@ from keras.utils import np_utils
 from sklearn.cross_validation import train_test_split
 
 
-class AudioAnalyzer():
+class AudioAnalyzer(object):
     """AudioAnalyzer docstring goes here TODO
 
     """
@@ -93,7 +93,7 @@ class AudioAnalyzer():
             self.logger.debug('Layer output: %s', str(l.output_shape))
 
         self.logger.info('Building the output layer for %d classes',
-                self.active_song.num_classes)
+                         self.active_song.num_classes)
 
         l = self.make_layer(
             {'type': 'Dense', 'args': (self.active_song.num_classes,)})
@@ -214,11 +214,11 @@ class AudioAnalyzer():
 
         if np.amax(idx) > self.Sxx.shape[1]:
             raise IndexError('Data index of sample out of bounds, only {0} '
-                    'samples in the dataset'.format(self.Sxx.shape[1] - img_cols))
+                             'samples in the dataset'.format(self.Sxx.shape[1] - img_cols))
 
         if np.amin(idx) < 0:
             raise IndexError('Data index of sample out of bounds, '
-                    'negative index requested')
+                             'negative index requested')
 
         # index out the data
         classification = self.active_song.classification[idx]
@@ -249,11 +249,11 @@ class AudioAnalyzer():
 
         if np.amax(idx) > self.Sxx.shape[1]:
             raise IndexError('Data index of sample out of bounds, only {0} '
-                    'samples in the dataset'.format(self.Sxx.shape[1] - img_cols))
+                             'samples in the dataset'.format(self.Sxx.shape[1] - img_cols))
 
         if np.amin(idx) < 0:
             raise IndexError('Data index of sample out of bounds, '
-                    'negative index requested')
+                             'negative index requested')
 
         # index out the data
         max_idx = (self.Sxx.shape[1] - 1)
@@ -315,15 +315,15 @@ class AudioAnalyzer():
         if nfft < nperseg:
             nfft = 2**np.ceil(np.log2(nperseg))
             self.logger.warning('NFFT (%d) cannot be less than the number of '
-                    'samples in each time_list window (%d).  Temporarily '
-                    'increasing nfft to %d, which will require more memory.  '
-                    'To avoid this, decrease FFT Time Window in the parameters'
-                    ' menu.',
-                    nfft, nperseg, 2**np.ceil(np.log2(nperseg)))
+                                'samples in each time_list window (%d).  Temporarily '
+                                'increasing nfft to %d, which will require more memory.  '
+                                'To avoid this, decrease FFT Time Window in the parameters'
+                                ' menu.',
+                                nfft, nperseg, 2**np.ceil(np.log2(nperseg)))
 
         for i in range(0, split_count):
             self.logger.info('Processing songfile from %d seconds to %d '
-                    'seconds', i * process_chunk, (i + 1) * process_chunk)
+                             'seconds', i * process_chunk, (i + 1) * process_chunk)
 
             (freq, time_part, Sxx_part) = signal.spectrogram(
                 data[i * nchunk:(i + 1) * nchunk],
@@ -717,6 +717,6 @@ class SongFile(object):
             assert isinstance(sf, cls)
         except AssertionError:
             cls.logger.error('Cannot deserialize the '
-            'file %s, not a valid instance of SongFile', filename)
+                             'file %s, not a valid instance of SongFile', filename)
         else:
             return sf

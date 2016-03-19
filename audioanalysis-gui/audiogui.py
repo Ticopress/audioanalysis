@@ -49,7 +49,7 @@ from threadsafety import BGThread, SignalStream
 # Determine if the program is executing in a bundle or not
 frozen = getattr(sys, 'frozen', False)
 sysdir = sys._MEIPASS if frozen else os.path.dirname(  # @UndefinedVariable
-        __file__)
+    __file__)
 
 uifile = os.path.join(sysdir, 'main.ui')
 Ui_MainWindow, QMainWindow = loadUiType(uifile)
@@ -101,7 +101,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             filename=os.path.join(logdir, logfile))
 
         file_format = logging.Formatter(fmt='%(levelname)s: %(asctime)s from '
-                '%(name)s in %(funcName)s: %(message)s')
+                                        '%(name)s in %(funcName)s: %(message)s')
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(file_format)
         self.logger.addHandler(file_handler)
@@ -115,7 +115,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.setLevel(logging.DEBUG)
 
         self.logger.debug('Start of program execution '
-                '{0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                          '{0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
         # Set thread priority for the GUI thread to be non-laggy
         QtCore.QThread.currentThread().setPriority(QtCore.QThread.HighPriority)
@@ -359,7 +359,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the file select button')
 
         file_names = QtGui.QFileDialog.getOpenFileNames(self, 'Select file(s)',
-                '', 'WAV files (*.wav)')
+                                                        '', 'WAV files (*.wav)')
         if file_names:
             self.load_files_async(file_names)
         else:
@@ -395,10 +395,10 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
                 )
             except KeyError:
                 self.logger.error('Cannot load files - parameters file_split'
-                        ' or load_downsampling not present')
+                                  ' or load_downsampling not present')
 
             self.logger.info('Loaded %s as %d SongFiles', str(f),
-                    len(new_songs))
+                             len(new_songs))
 
             self.analyzer.songs.extend(new_songs)
 
@@ -459,7 +459,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the NN load button')
 
         folder = str(QtGui.QFileDialog.getExistingDirectory(parent=self,
-                caption='Select a folder containing the required NN files'))
+                                                            caption='Select a folder containing the required NN files'))
 
         self.load_neural_net_async(folder)
 
@@ -495,7 +495,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.analyzer.train_neural_net()
 
         self.logger.info('{0} seconds elapsed building and training the '
-                'classifier'.format(time.time() - start))
+                         'classifier'.format(time.time() - start))
 
     @QtCore.pyqtSlot()
     def save_neural_net_callback(self):
@@ -503,7 +503,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the NN save button')
 
         fullpath = str(QtGui.QFileDialog.getSaveFileName(parent=self,
-                caption='Enter folder name to save the required NN files'))
+                                                         caption='Enter folder name to save the required NN files'))
 
         self.save_neural_net_async(fullpath)
 
@@ -525,7 +525,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the deserialize song button')
 
         file_name = QtGui.QFileDialog.getOpenFileName(self,
-                'Select serialized song', '', 'PKL files (*.pkl)')
+                                                      'Select serialized song', '', 'PKL files (*.pkl)')
 
         self.deserialize_song_async(file_name)
 
@@ -544,7 +544,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the serialize active song button')
 
         destination = str(QtGui.QFileDialog.getExistingDirectory(self,
-                    'Choose location for serialized song'))
+                                                                 'Choose location for serialized song'))
 
         if destination:
             self.serialize_song_async(self.analyzer.active_song, destination)
@@ -561,7 +561,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the serialize all songs button')
 
         destination = str(QtGui.QFileDialog.getExistingDirectory(self,
-                    'Choose location for serialized songs'))
+                                                                 'Choose location for serialized songs'))
 
         if destination:
             self.serialize_all_songs_async(self.analyzer.songs, destination)
@@ -577,11 +577,11 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
     def save_motifs_callback(self, mode):
         if mode == 'all':
             destination = str(QtGui.QFileDialog.getExistingDirectory(self,
-                    'Select folder'))
+                                                                     'Select folder'))
 
         elif mode == 'current':
             destination = str(QtGui.QFileDialog.getSaveFileName(self,
-                    'Choose filename and save location'))
+                                                                'Choose filename and save location'))
 
         if destination:
             self.save_motifs_async(mode, destination)
@@ -682,7 +682,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         if (e.text() in [str(i) for i in range(10)] and
                 self.canvas.current_selection):
             indices = np.searchsorted(self.analyzer.active_song.time,
-                    np.asarray(self.canvas.current_selection))
+                                      np.asarray(self.canvas.current_selection))
 
             self.analyzer.active_song.classification[
                 indices[0]:indices[1]] = int(e.text())
@@ -791,7 +791,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
             count += 1
 
         self.logger.info('Took {0:2.3f} seconds to find motifs in {1} '
-                'SongFile(s)'.format(time.time() - start, count))
+                         'SongFile(s)'.format(time.time() - start, count))
 
     @QtCore.pyqtSlot()
     def save_parameters_callback(self):
@@ -799,7 +799,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the save parameters button')
 
         fullpath = str(QtGui.QFileDialog.getSaveFileName(parent=self,
-                caption='Enter the parameters file name'))
+                                                         caption='Enter the parameters file name'))
 
         if fullpath:
             self.save_parameters_async(fullpath)
@@ -824,7 +824,7 @@ class AudioGUI(Ui_MainWindow, QMainWindow):
         self.logger.debug('Clicked the load parameters button')
 
         file_name = QtGui.QFileDialog.getOpenFileName(self,
-                'Select parameters file', '', 'TXT files (*.txt)')
+                                                      'Select parameters file', '', 'TXT files (*.txt)')
 
         if file_name:
             self.load_parameters_async(file_name)
@@ -907,7 +907,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             navtype = kwargs['type']
         except KeyError:
             self.error('Invalid navigation signal or command %s, no type'
-                    ' provided', str(kwargs))
+                       ' provided', str(kwargs))
             return
 
         if navtype == 'drag_pan':
@@ -1056,7 +1056,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
             assert self.valid(x_domain)
         except AssertionError:
             self.logger.warning("Assert failed: the domain command %s is"
-                    "out of bounds", str(x_domain))
+                                "out of bounds", str(x_domain))
             return
 
         self.logger.debug('Setting the plot domain to %s', str(x_domain))
@@ -1091,7 +1091,7 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
                 self.set_range(self.axis_names[idx], yrange)
         except IndexError:
             self.logger.warning('Too many yranges provided, there are only %d'
-                    'axes available', len(self.axis_names) + 1)
+                                'axes available', len(self.axis_names) + 1)
             return
 
     def valid(self, xlims):
@@ -1141,14 +1141,14 @@ class SpectrogramCanvas(FigureCanvas, QtCore.QObject):
         # this method is much much faster!
         # center bin
         self.extent = (t[0] - halfbin_time, t[-1] + halfbin_time,
-                  f[0] - halfbin_freq, f[-1] + halfbin_freq)
+                       f[0] - halfbin_freq, f[-1] + halfbin_freq)
 
         self.image = ax.imshow(Sxx,
-                interpolation="nearest",
-                extent=self.extent,
-                cmap='gray_r',
-                vmin=vmin,
-                vmax=vmax
+                               interpolation="nearest",
+                               extent=self.extent,
+                               cmap='gray_r',
+                               vmin=vmin,
+                               vmax=vmax
                                )
 
         ax.set_title(title, loc='left')
@@ -1287,7 +1287,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 self.addSeparator()
             else:
                 a = self.addAction(self.local_icon(image_file + '.png'),
-                        text, getattr(self, callback))
+                                   text, getattr(self, callback))
 
                 self._actions[callback] = a
                 if callback in ['select', 'scale']:
@@ -1305,7 +1305,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
             canvas_.add_tool(self)
         except AttributeError as e:
             self.logger.error('Cannot initialize SpectrogramNavBar - canvas '
-                    'type not valid')
+                              'type not valid')
             raise e
 
     def local_icon(self, name):
@@ -1478,11 +1478,11 @@ class SpectrogramNavBar(NavigationToolbar2QT):
         if event.button == 1:
             self._button_pressed = 1
             self.logger.debug('Pressed left mouse to select region in '
-                    'select mode')
+                              'select mode')
 
         elif event.button == 3:
             self.logger.debug('Pressed right mouse button to place start mark'
-                    ' in select mode')
+                              ' in select mode')
             self._button_pressed = 3
         else:
             self._button_pressed = None
@@ -1501,7 +1501,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 self._xypress.append((x, y, a, i, a._get_view()))
 
         self._idSelect = self.canvas.mpl_connect('motion_notify_event',
-                self.drag_select)
+                                                 self.drag_select)
 
         self.press(event)
 
@@ -1553,7 +1553,7 @@ class SpectrogramNavBar(NavigationToolbar2QT):
                 x, lastx = max(min(x, lastx), x1), min(max(x, lastx), x2)
 
                 self.logger.debug('Selected pixel domain ',
-                        '%0.4f, %0.4f', x, lastx)
+                                  '%0.4f, %0.4f', x, lastx)
 
                 inv = ax.transData.inverted()
 
